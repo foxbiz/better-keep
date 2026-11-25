@@ -1,3 +1,4 @@
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/components/logo.dart';
 import 'package:better_keep/services/review_prompt_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
@@ -35,200 +36,202 @@ class _AboutPageState extends State<AboutPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.about)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // App Info Section
-          const SizedBox(height: 24),
-          Center(
-            child: Column(
-              children: [
-                LogoImage(size: 80),
-                const SizedBox(height: 16),
-                Text(
-                  context.l10n.appTitle,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  context.l10n.version(_version, _buildNumber),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).textTheme.bodySmall?.color,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          const Divider(),
-          const SizedBox(height: 16),
-
-          // Company Info Section
-          Center(
-            child: Column(
-              children: [
-                Text(
-                  context.l10n.developedBy,
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    'assets/foxbiz.png',
-                    width: 80,
-                    height: 80,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Image.asset(
-                        'assets/foxbiz-1024.png',
-                        width: 80,
-                        height: 80,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(Icons.business, size: 80);
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Foxbiz Software Pvt. Ltd.',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse('https://foxbiz.io');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.language),
-                  label: const Text('foxbiz.io'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          const Divider(),
-          const SizedBox(height: 16),
-
-          // Source availability section
-          Center(
-            child: Column(
-              children: [
-                Icon(
-                  Icons.code,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  context.l10n.openSource,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  context.l10n.openSourceDescription,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).textTheme.bodySmall?.color,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse(
-                      'https://github.com/foxbiz/better-keep',
-                    );
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.open_in_new),
-                  label: Text(context.l10n.viewOnGithub),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          if (!kIsWeb)
+      body: DuoSafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // App Info Section
+            const SizedBox(height: 24),
             Center(
-              child: OutlinedButton.icon(
-                onPressed: ReviewPromptService.instance.openStoreListing,
-                icon: const Icon(Icons.star_outline),
-                label: Text(switch (defaultTargetPlatform) {
-                  TargetPlatform.android => context.l10n.rateOnPlayStore,
-                  TargetPlatform.windows => context.l10n.rateOnMicrosoftStore,
-                  _ => context.l10n.rateOnAppStore,
-                }),
+              child: Column(
+                children: [
+                  LogoImage(size: 80),
+                  const SizedBox(height: 16),
+                  Text(
+                    context.l10n.appTitle,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    context.l10n.version(_version, _buildNumber),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ],
               ),
             ),
-          const SizedBox(height: 32),
-          const Divider(),
-          const SizedBox(height: 16),
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
 
-          // Legal Section
-          Center(
-            child: Column(
-              children: [
-                Icon(
-                  Icons.gavel,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  context.l10n.legal,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+            // Company Info Section
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    context.l10n.developedBy,
+                    style: const TextStyle(fontSize: 14),
                   ),
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse('https://betterkeep.app/terms');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.description_outlined),
-                  label: Text(context.l10n.termsOfUse),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse('https://betterkeep.app/privacy');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.privacy_tip_outlined),
-                  label: Text(context.l10n.privacyPolicy),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset(
+                      'assets/foxbiz.png',
+                      width: 80,
+                      height: 80,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Image.asset(
+                          'assets/foxbiz-1024.png',
+                          width: 80,
+                          height: 80,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.business, size: 80);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Foxbiz Software Pvt. Ltd.',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse('https://foxbiz.io');
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.language),
+                    label: const Text('foxbiz.io'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // Source availability section
+            Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.code,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    context.l10n.openSource,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    context.l10n.openSourceDescription,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse(
+                        'https://github.com/foxbiz/better-keep',
+                      );
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(context.l10n.viewOnGithub),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (!kIsWeb)
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: ReviewPromptService.instance.openStoreListing,
+                  icon: const Icon(Icons.star_outline),
+                  label: Text(switch (defaultTargetPlatform) {
+                    TargetPlatform.android => context.l10n.rateOnPlayStore,
+                    TargetPlatform.windows => context.l10n.rateOnMicrosoftStore,
+                    _ => context.l10n.rateOnAppStore,
+                  }),
+                ),
+              ),
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // Legal Section
+            Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.gavel,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    context.l10n.legal,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse('https://betterkeep.app/terms');
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.description_outlined),
+                    label: Text(context.l10n.termsOfUse),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse('https://betterkeep.app/privacy');
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.privacy_tip_outlined),
+                    label: Text(context.l10n.privacyPolicy),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

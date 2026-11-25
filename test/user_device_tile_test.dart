@@ -38,6 +38,7 @@ void main() {
               width: 320,
               child: UserDeviceTile(
                 name: deviceName,
+                createdAtLabel: 'Created: 11/01/2026 · 15:16',
                 subtitle: 'Android 16',
                 platformIcon: Icons.android,
                 isPending: true,
@@ -59,6 +60,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
+    expect(find.text('Created: 11/01/2026 · 15:16'), findsOneWidget);
     final nameText = tester.widget<Text>(find.text(deviceName));
     expect(nameText.maxLines, 1);
     expect(nameText.overflow, TextOverflow.ellipsis);

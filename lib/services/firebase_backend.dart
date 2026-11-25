@@ -9,6 +9,9 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import 'firebase_emulator_host.dart';
+import 'firebase_emulator_web_proxy.dart';
+import 'firebase_storage_emulator_transport.dart';
+import 'web_release.dart';
 
 /// Identifies the local persistence namespace paired with a Firebase backend.
 enum FirebaseLocalDataScope {
@@ -18,11 +21,12 @@ enum FirebaseLocalDataScope {
   bool get isEmulator => this == FirebaseLocalDataScope.emulator;
 
   String get databaseName =>
-      isEmulator ? 'better_keep_emulator.db' : 'better_keep.db';
+      '$webStoragePrefix${isEmulator ? 'better_keep_emulator.db' : 'better_keep.db'}';
 
   String get preferencePrefix => isEmulator ? 'firebase_emulator.' : '';
 
-  String get secureStoragePrefix => isEmulator ? 'firebase_emulator.' : '';
+  String get secureStoragePrefix =>
+      '$webStoragePrefix${isEmulator ? 'firebase_emulator.' : ''}';
 
   String get fileDirectoryName => isEmulator ? 'firebase_emulator' : '';
 
@@ -88,6 +92,7 @@ class FirebaseBackend {
       ValueNotifier(null);
 
   static bool get isConfigured => _active != null;
+  static FirebaseApp get defaultApp => Firebase.app(webFirebaseAppName);
   static bool get isLocked => _locked;
 
   static FirebaseBackendConfiguration get active {
@@ -125,7 +130,7 @@ class FirebaseBackend {
 
   static FirebaseBackendConfiguration configureLive() {
     _ensureMutable();
-    final liveApp = Firebase.app();
+    final liveApp = defaultApp;
     final configuration = FirebaseBackendConfiguration(
       environment: FirebaseEnvironment.live,
       app: liveApp,
@@ -153,7 +158,15 @@ class FirebaseBackend {
   }) async {
     _ensureMutable();
 
-    final baseAppName = emulatorAppNameFor(endpoints.host);
+    if (!kDebugMode) {
+      throw StateError('Firebase emulators are only available in debug mode.');
+    }
+    configureFirebaseEmulatorWebProxy(endpoints);
+    final storageEndpoint = await configureStorageEmulatorTransport(
+      endpoints,
+      projectId: defaultApp.options.projectId,
+    );
+    final baseAppName = emulatorAppNameFor(endpoints.routingIdentity);
     final canUsePreferred =
         preferredAppName != null &&
         preferredAppName.startsWith(baseAppName) &&
@@ -162,11 +175,12 @@ class FirebaseBackend {
         ? preferredAppName
         : _nextEmulatorAppName(baseAppName);
     final existingApp = _findApp(appName);
+    prepareFirebaseAuthEmulator(appName, defaultApp.options, endpoints);
     final emulatorApp =
         existingApp ??
         await Firebase.initializeApp(
           name: appName,
-          options: Firebase.app().options,
+          options: defaultApp.options,
         );
 
     final auth = FirebaseAuth.instanceFor(app: emulatorApp);
@@ -198,8 +212,8 @@ class FirebaseBackend {
         FirebaseEmulatorEndpoints.functionsPort,
       );
       await storage.useStorageEmulator(
-        endpoints.host,
-        FirebaseEmulatorEndpoints.storagePort,
+        storageEndpoint.host,
+        storageEndpoint.port,
         automaticHostMapping: false,
       );
     } catch (error, stack) {

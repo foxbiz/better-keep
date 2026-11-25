@@ -4,16 +4,17 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { google } from "googleapis";
 import * as jose from "jose";
 import * as nodemailer from "nodemailer";
+import { activeAppStoreReceipt } from "./appStoreSubscription";
 import {
 	appStoreSharedSecret,
 	auth,
 	db,
 	emailPassword,
 	IOS_BUNDLE_ID,
-	IOS_PRODUCT_IDS,
 	isEmulator,
 } from "./config";
 import { mergeSubscriptionClaims } from "./customClaims";
+import { formatEmailDate, generateTransactionalEmail } from "./email_templates";
 import { deliverEmail, type EmailDeliveryResult } from "./emailDelivery";
 import { refreshGooglePlaySubscription } from "./googlePlayService";
 import { enqueueRevenueEventInTransaction } from "./revenueOutbox";
@@ -21,6 +22,7 @@ import {
 	normalizedSubscriptionFields,
 	requireVerifiedEntitlementPayload,
 } from "./subscriptionEntitlement";
+import { appleSubscriptionProduct } from "./subscriptionProducts";
 import { reconcileUserEntitlement } from "./subscriptionReconciler";
 import type { AppStoreJWSTransactionPayload } from "./types";
 
@@ -34,7 +36,7 @@ import type { AppStoreJWSTransactionPayload } from "./types";
  */
 export async function setSubscriptionClaims(
 	userId: string,
-	plan: "pro" | "free",
+	plan: "pro" | "lite" | "free",
 	expiresAt: Date | null,
 ): Promise<void> {
 	try {
@@ -127,72 +129,29 @@ export async function sendTrialWelcomeEmail(
 	const senderEmail = process.env.EMAIL_FROM;
 	const senderName = process.env.EMAIL_NAME;
 
-	const expiryDateStr = expiresAt.toLocaleDateString("en-US", {
-		weekday: "long",
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-	});
+	const expiryDateStr = formatEmailDate(expiresAt);
 
 	const mailOptions = {
 		from: `"${senderName}" <${senderEmail}>`,
 		to: email,
-		subject: "Welcome to Better Keep Pro - Your Free Trial Has Started! 🎉",
-		html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-        <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-          <h1 style="color: #6750A4; font-size: 24px; margin-bottom: 16px;">Welcome to Better Keep Pro! 🎉</h1>
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">
-            Hi ${displayName},
-          </p>
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">
-            Thank you for signing up! We've activated your <strong>free Pro trial</strong> so you can experience all the premium features.
-          </p>
-          <div style="background: linear-gradient(135deg, #6750A4 0%, #9C27B0 100%); border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0; color: white;">
-            <p style="margin: 0; font-size: 14px; opacity: 0.9;">Your trial expires on</p>
-            <p style="margin: 8px 0 0 0; font-size: 20px; font-weight: bold;">${expiryDateStr}</p>
-          </div>
-          <p style="color: #333; font-size: 16px; line-height: 1.5; font-weight: 600;">
-            During your trial, you can:
-          </p>
-          <ul style="color: #333; font-size: 14px; line-height: 1.8;">
-            <li>🔒 Lock unlimited notes with biometric or PIN</li>
-            <li>☁️ Sync notes across all your devices with end-to-end encryption</li>
-          </ul>
-          <p style="color: #666; font-size: 14px; line-height: 1.5;">
-            We hope you enjoy using Better Keep! If you have any questions, reach out to us at <a href="mailto:support@betterkeep.app" style="color: #6750A4;">support@betterkeep.app</a>.
-          </p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-          <p style="color: #999; font-size: 12px;">
-            Better Keep by Foxbiz Software Pvt. Ltd.
-          </p>
-        </div>
-      </body>
-      </html>
-    `,
-		text: `
-Welcome to Better Keep Pro! 🎉
-
-Hi ${displayName},
-
-Thank you for signing up! We've activated your free Pro trial so you can experience all the premium features.
-
-Your trial expires on: ${expiryDateStr}
-
-During your trial, you can:
-- Lock unlimited notes with biometric or PIN
-- Sync notes across all your devices with end-to-end encryption
-
-We hope you enjoy using Better Keep! If you have any questions, reach out to us at support@betterkeep.app.
-
-Better Keep by Foxbiz Software Pvt. Ltd.
-    `,
+		subject: "Your Better Keep Pro trial has started",
+		...generateTransactionalEmail({
+			title: "Your Pro trial starts here",
+			category: "Welcome to Better Keep",
+			preheader: "Your free Pro trial is ready. Here’s what’s included.",
+			paragraphs: [
+				`Hi ${displayName},`,
+				"Your free Pro trial is active. You can start using these features in the app today.",
+			],
+			details: [{ label: "Trial ends", value: expiryDateStr }],
+			list: {
+				title: "Included in your trial",
+				items: [
+					"Lock unlimited notes with biometric or PIN",
+					"Sync notes across your devices with end-to-end encryption",
+				],
+			},
+		}),
 	};
 
 	await sendEmail(mailOptions);
@@ -275,88 +234,61 @@ export async function sendRazorpaySubscriptionEmail(
 	let ctaText = "";
 	let ctaUrl = "";
 
-	const expiryStr = expiryDate ? expiryDate.toLocaleDateString() : "N/A";
+	const expiryStr = expiryDate ? formatEmailDate(expiryDate) : "N/A";
 
 	switch (type) {
 		case "welcome":
-			subject = "Welcome to Better Keep Notes Pro! 🎉";
-			heading = "Welcome to Better Keep Notes Pro";
-			message = `Thank you for subscribing! Your account has been upgraded and you now have access to all Pro features including unlimited locked notes, real-time encrypted sync, and priority support.\n\nYour subscription will renew on ${expiryStr}.`;
+			subject = "Your Better Keep Notes subscription is active";
+			heading = "Your subscription is active";
+			message = `Thank you for subscribing! Your subscription is active. Open the app to use the features included in your plan.\n\nYour subscription will renew on ${expiryStr}.`;
 			ctaText = "Open Better Keep Notes";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "cancelled":
 			subject = "Your Better Keep Notes subscription has been cancelled";
-			heading = "Subscription Cancelled";
-			message = `Your subscription has been cancelled. You'll continue to have Pro access until ${expiryStr}, after which you'll be switched to the free plan.\n\nYou can resume your subscription anytime before it expires to keep your Pro benefits.`;
+			heading = "Subscription cancelled";
+			message = `Your subscription has been cancelled. You'll continue to have access to your plan until ${expiryStr}, after which you'll be switched to the free plan.\n\nYou can resume your subscription anytime before it expires to keep your subscription benefits.`;
 			ctaText = "Resume Subscription";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "resumed":
 			subject = "Your Better Keep Notes subscription has been resumed";
-			heading = "Subscription Resumed";
-			message = `Great news! Your subscription has been resumed and will renew automatically on ${expiryStr}. You'll continue to enjoy all Pro features.`;
+			heading = "Subscription resumed";
+			message = `Your subscription has been resumed and will renew automatically on ${expiryStr}.`;
 			ctaText = "Open Better Keep Notes";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "renewed":
 			subject = "Your Better Keep Notes subscription has been renewed";
-			heading = "Subscription Renewed";
-			message = `Your Pro subscription has been renewed successfully. Your next billing date is ${expiryStr}. Thank you for your continued support!`;
+			heading = "Subscription renewed";
+			message = `Your subscription has been renewed successfully. Your next billing date is ${expiryStr}. Thank you for supporting Better Keep.`;
 			ctaText = "Open Better Keep Notes";
 			ctaUrl = "https://betterkeep.app";
 			break;
 		case "expired":
-			subject = "Your Better Keep Notes Pro subscription has expired";
-			heading = "Subscription Expired";
+			subject = "Your Better Keep Notes subscription has expired";
+			heading = "Subscription expired";
 			message =
-				"Your Pro subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain access to Pro features.";
-			ctaText = "Resubscribe to Pro";
+				"Your subscription has expired and your account has been switched to the free plan. You can resubscribe anytime to regain your subscription benefits.";
+			ctaText = "Resubscribe";
 			ctaUrl = "https://betterkeep.app";
 			break;
 	}
-
-	const htmlContent = `
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<meta charset="utf-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-			</head>
-			<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-				<div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-					<div style="text-align: center; margin-bottom: 24px;">
-						<img src="https://betterkeep.app/icons/logo.png" alt="Better Keep Notes" style="width: 64px; height: 64px;">
-					</div>
-					<h1 style="color: #333; font-size: 22px; margin-bottom: 20px;">${heading}</h1>
-					<p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px; white-space: pre-line;">
-						${message}
-					</p>
-					<div style="text-align: center; margin: 24px 0;">
-						<a href="${ctaUrl}" style="background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">${ctaText}</a>
-					</div>
-					<p style="color: #555; font-size: 15px; line-height: 1.6;">
-						If you have any questions, contact us at <a href="mailto:support@betterkeep.app" style="color: #6366f1;">support@betterkeep.app</a>.
-					</p>
-					<hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-					<p style="color: #999; font-size: 13px;">
-						<strong>Better Keep Notes</strong> by Foxbiz Software Pvt. Ltd.
-					</p>
-				</div>
-			</body>
-			</html>
-		`;
 
 	const result = await sendEmail({
 		from: `"${senderName}" <${senderEmail}>`,
 		to: email,
 		subject: subject,
-		html: htmlContent,
-		text: `${heading}\n\n${message}\n\n${ctaText}: ${ctaUrl}\n\nBetter Keep Notes by Foxbiz Software Pvt. Ltd.`,
+		...generateTransactionalEmail({
+			title: heading,
+			category: "Subscription",
+			paragraphs: message.split("\n\n"),
+			action: { label: ctaText, url: ctaUrl },
+		}),
 	});
 
 	console.log(
-		`${result === "logged" ? "Logged" : "Sent"} Razorpay ${type} email to ${email}`,
+		`${result === "logged" ? "Logged" : "Sent"} Razorpay ${type} email`,
 	);
 	return result;
 }
@@ -547,8 +479,8 @@ async function handleVerifiedJWSTransaction(
 	}
 
 	// Validate product ID
-	const knownProductIds = Object.values(IOS_PRODUCT_IDS) as string[];
-	if (!knownProductIds.includes(transaction.productId)) {
+	const product = appleSubscriptionProduct(transaction.productId);
+	if (!product) {
 		return {
 			valid: false,
 			message: `Unknown product ID: ${transaction.productId}`,
@@ -567,8 +499,7 @@ async function handleVerifiedJWSTransaction(
 	const originalTransactionId = transaction.originalTransactionId;
 	const resolvedProductId = transaction.productId;
 	const expiresMs = transaction.expiresDate;
-	const billingPeriod =
-		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+	const billingPeriod = product.period;
 	const expiresAt = Timestamp.fromMillis(expiresMs);
 
 	// Atomically read the subscription doc and write the new owner inside a
@@ -644,7 +575,7 @@ async function handleVerifiedJWSTransaction(
 									? "production"
 									: "test",
 							expiresAt,
-							plan: "pro",
+							plan: product.plan,
 							source: "app_store",
 							subscriptionState: subState,
 							willAutoRenew: autoRenew,
@@ -695,7 +626,7 @@ async function handleVerifiedJWSTransaction(
 		sendWelcomeEmail: !welcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
 		subscription: requireVerifiedEntitlementPayload({
-			plan: "pro",
+			plan: product.plan,
 			source: "app_store",
 			billingPeriod,
 			expiresAt: Timestamp.fromMillis(expiresMs),
@@ -830,7 +761,6 @@ export async function verifyAppStorePurchase(
 		};
 	}
 
-	const knownProductIds = Object.values(IOS_PRODUCT_IDS) as string[];
 	const latestReceiptInfo =
 		(appleResponse.latest_receipt_info as Array<Record<string, string>>) || [];
 	const receiptRoot =
@@ -843,35 +773,23 @@ export async function verifyAppStorePurchase(
 		(appleResponse.pending_renewal_info as Array<Record<string, string>>) || [];
 	const now = Date.now();
 
-	const activeReceipts = receiptEntries.filter((r) => {
-		const expiresMs = Number.parseInt(r.expires_date_ms || "0", 10);
-		return (
-			knownProductIds.includes(r.product_id) &&
-			!r.cancellation_date_ms &&
-			expiresMs > now
-		);
-	});
+	const latest = activeAppStoreReceipt(receiptEntries, now);
 
-	if (activeReceipts.length === 0) {
+	if (!latest) {
 		console.warn(
 			`App Store verify: no active receipts. latest_receipt_info=${latestReceiptInfo.length}, in_app=${inAppReceipts.length}`,
 		);
 		return { valid: false, message: "No active subscription found in receipt" };
 	}
 
-	activeReceipts.sort(
-		(a, b) =>
-			Number.parseInt(b.expires_date_ms, 10) -
-			Number.parseInt(a.expires_date_ms, 10),
-	);
-	const latest = activeReceipts[0];
-
 	const originalTransactionId = latest.original_transaction_id;
 	const expiresMs = Number.parseInt(latest.expires_date_ms, 10);
 	const resolvedProductId = latest.product_id;
+	const product = appleSubscriptionProduct(resolvedProductId);
 	if (
 		!originalTransactionId ||
 		!resolvedProductId ||
+		!product ||
 		!Number.isFinite(expiresMs)
 	) {
 		return {
@@ -879,8 +797,7 @@ export async function verifyAppStorePurchase(
 			message: "Receipt payload missing required subscription fields",
 		};
 	}
-	const billingPeriod =
-		resolvedProductId === IOS_PRODUCT_IDS.yearly ? "yearly" : "monthly";
+	const billingPeriod = product.period;
 
 	const expiresAt = Timestamp.fromMillis(expiresMs);
 
@@ -927,7 +844,7 @@ export async function verifyAppStorePurchase(
 							billingPeriod,
 							environment: receiptEnvironment,
 							expiresAt,
-							plan: "pro",
+							plan: product.plan,
 							source: "app_store",
 							subscriptionState,
 							willAutoRenew,
@@ -976,7 +893,7 @@ export async function verifyAppStorePurchase(
 		sendWelcomeEmail: !appStoreWelcomeEmailAlreadySent,
 		message: "Subscription verified and activated",
 		subscription: requireVerifiedEntitlementPayload({
-			plan: "pro",
+			plan: product.plan,
 			source: "app_store",
 			billingPeriod,
 			expiresAt: Timestamp.fromMillis(expiresMs),

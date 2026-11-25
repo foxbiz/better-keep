@@ -1,0 +1,653 @@
+# Better Keep — Project Context for LLMs
+
+> **IMPORTANT**: After making any significant code change (adding/removing files, changing architecture, updating dependencies, modifying database schema, adding new services/components), update this file to reflect the new state. Keep it current — stale context leads to bad suggestions.
+
+---
+
+## Web channels and sync recovery
+
+- The website lists help guides at `/help`. The `/web-beta` guide links to the explicit `/app/?channel=beta` invitation and explains how to return to stable using the Beta badge or, if the app opens without the badge, `/app/?channel=stable`. The link requires a valid release manifest.
+- Firebase note restore records `owner_uid` in cache metadata. A fully fetched cache for the current account can collect later commits while individual notes retry. The library checkpoint advances once all cached revisions have been handled or durably queued.
+
+## External upload throughput and progress
+
+Unreadable attachment sources report source-specific guidance while healthy notes upload; cache/database failures report neutral local-access guidance without assuming low storage. Blocked-source and unlock feedback offer View notes: `sync_issues_page.dart` lists current failed note revisions, hides locked titles, opens the existing editor/PIN dialog, and closes its routes when the owning session changes. Recovery strictly decodes nested sketches and validates readable editor content, including after PIN unlock, before opening a note; registered embed payloads and populated table-cell Deltas (including nested tables) are checked before rendering, while missing attachment files retain their placeholder; embed cardinality is explicitly checked in release and malformed sketches/embeds raise sanitized FormatException; valid legacy formats and opaque PIN sources remain supported without rewriting stored rows. Other readers retain their defaults. The list masks locked titles in SQL and refreshes on relevant model changes or pass completion, not progress ticks. Retry now requests a manual sync and reports its actual returned outcome; duplicate list refreshes preserve that result, while new attempts or changed failures supersede it. Provider details replace retry feedback on substantive connection/error/pending-state changes and guard duplicate requests and retired dialogs. Missing-attachment guidance suggests syncing from the original device rather than inspecting files. No-progress backoff uses a quiet waiting status with Retry now, not an active spinner; the pill fades after three seconds and provider details retain pending status. Outgoing source-read failures retain their sourceRead identity; incoming attachment verification I/O faults remain localStorage. Pending upload checks page through identities/current local revisions without payload decoding or per-item database calls; neutral cancellation preserves upload intent and Free restore attempts. Cleanup never masks the primary error; debug diagnostics include error types only.
+External sync passes establish their own library account/key/database cloud-operation zone, so nested local writes do not inherit an expired startup/recovery guard; retirement still cancels the pass.
+Interrupted outgoing passes persist a local account/library/connection-scoped upload intent before transfer. Startup and foreground resume finish it independently of automatic-sync entitlement; drained runnable work clears it even when blocked sources remain, which stay visibly pending without enabling future Free edits. Failure identities are revision-scoped. Later Free edits remain manual. Unreadable attachment sources do not block healthy notes; cache writes and DB faults still abort safely. Continuation requires capture/publication progress, otherwise it backs off 5–300 seconds. Redundant writes of an already-durable intent are skipped. The upload pill uses an upward transfer animation, compact localized counts (exact when rounding would falsely show equal progress), then ETA/percentage above the bar without a duplicate total.
+
+Non-batch external publication runs at most four note workers per pending page. Shared object uploads are deduplicated only within that page; retries recheck provider durability. Verified cached objects up to `SyncLimits.uploadBufferBytes` can bypass the serialized full-object lane. Large/unknown objects remain serialized through upload; size hints are checked first, then native/OPFS use the optional `FileSystemMetadata` capability for cheap cold-cache probes; IndexedDB keeps cold unknown files serialized. WebDAV/Nextcloud share one in-flight collection initialization and retry after failure. Drive's independent `multipartUploadBytes` threshold is 1 MiB; larger files use resumable uploads. Preserve revision checks before/after transfer, guarded acknowledgements and draining workers on failure. Upload/download progress is note-based; ETA uses at most 32 per-second completion samples. Queued passes keep the running state, clear the previous transfer before starting, and settle even if a listener backgrounds the app or disables automatic sync between passes. Engine progress emits transfers only; the scheduler owns completion and clearing.
+
+## Overview
+
+Better Keep is a cross-platform (Android, iOS, macOS, Windows, Web) notes app inspired by Google Keep. Built with **Flutter** (Dart), backed by **Firebase** (Auth, Firestore, Storage, Cloud Functions). Features rich-text editing, E2E encryption, AI audio transcription (Whisper), reminders, sketches, labels, folders, and subscription monetization.
+
+- **Version**: 1.5.0+117
+- **License**: PolyForm Noncommercial 1.0.0
+- **Publisher**: Foxbiz Software Pvt. Ltd.
+- **Firebase Project**: `better-keep-notes`
+- **Live App**: https://betterkeep.app
+
+---
+
+Sign-out checks whether the selected external provider has acknowledged all local revisions, including deletions. Built-in sync and Sync off check the Firebase queues and acknowledgements. Unverified provider metadata produces a warning unless a transactional local check proves there are no user notes, label changes, ordering changes or deletion journals to discard.
+Sign-out closes the account and rotates its local file directory. The account_files.<environment>.active preference selects a bk-library-<uuid> directory. A matching .active.backup provides recovery when the primary is unavailable; retired directories are never selected. The .active.rotated marker distinguishes a rotated library from a legacy installation. A completed retirement marker (false) prevents a stale pointer from reopening deleted files. Ambiguous ownership at startup or during file access offers Retry or confirmed sign-out into a fresh directory. Unidentified files are left isolated. Secure browser contexts coordinate sign-out per storage environment and release channel. A competing tab can only reload the resulting library. Normal use in another tab can still keep its database open; environments without Web Locks support single-tab sign-out only. Keep the account gate closed until secure keys and local database files are cleared. Retired entries are removed in the background and retried after interruptions. The first sign-out clears known legacy attachment and cache names from shared roots. New account writers must use the active file system. Preserve inactive environment storage, and verify backup acknowledgements against the selected provider. The Home screen shows one download indicator during a bulk restore and responds to progress preference changes immediately. A failed manual refresh offers Retry in the visible status pill until dismissed or the status changes. A change in failure count alone keeps the pill dismissed. Pulling to refresh during a bulk restore acknowledges the download and waits for it to finish. If the pill is disabled or Home is covered, the matching Retry or View notes action appears in a snackbar.
+
+Authenticated startup is owned by the post-sign-in coordinator. The loading view must not automatically retry sign-in or set an encryption error based on elapsed time. Connection failures show localized connection guidance and an explicit Retry. Approved local sessions open Home automatically while cloud verification is unavailable; startup screens do not offer a redundant Continue Offline action. An interrupted registration with no authoritative device identity must resolve to explicit recovery, and nonauthoritative reads remain retryable rather than caching unfinished initialization. Optional native avatar downloads are bounded, shared between startup and widgets, and run outside required account initialization. Avatar results are account/session guarded and cached under the account library's profile_cache directory without new shared preference writes; pruning never lists the full note directory. Legacy preference paths are published only after checking file existence. Sign-out does not wait for optional avatar I/O; late writers remove their captured retired-account file and best-effort delete its empty retired library without recursion. Avatar URL changes prune only same-account cache files after a replacement is available; legacy shared support roots and unrelated files are preserved.
+
+## Home navigation and startup
+
+Home navigation uses `home_layout.dart`: a persistent sidebar requires at least
+800 dp usable width and 640 dp usable height, scaled up for large text. Keyboard
+insets do not change this mode. Short browser/device windows use a square-edged
+drawer whose navigation and footer scroll together. Titlebar buttons have 48 dp
+targets, 8 dp gaps between actions and compact 6 dp outer gutters, respecting
+each side's own safe inset. The avatar has a 20 dp radius (40 dp diameter) inside
+its 48 dp target. This navigation policy is intentionally separate from windowed
+editor/page routing.
+On an iPhone Duo only, the sidebar needs 600 dp of height, and an open window
+shows a note beside the list (`note_pane.dart`). A sketch or checklist opened from
+that note takes its place and moves the note to the list's side: editable beside a
+sketch, and for reading beside a checklist, because a checklist also writes the
+text of the note. The editor and the page stay ordinary routes whose position
+follows the window and fills it while folded, so folding never rebuilds them.
+Search stays on beside what opens from its results, though its field loses focus.
+On every device, leaving the notes section ends a search and clears its text.
+Every layout made for iPhone Duo depends on `isIPhoneDuo`
+(`services/iphone_duo.dart`), which is detected once before the app is shown; a
+window of the same size on any other device keeps its own layout. `DuoSafeArea`
+clears the status area at the side. Change a note from the list through
+`NotePaneHost.currentCopyOf`, because its editor may be open beside the list.
+Whatever signs out, erases or rewrites notes must await `NotePaneHost.closeNote`
+first when it starts from the list; `showPage` already does.
+`test/other_devices_test.dart` guards every other device.
+Selection counts scale down only when they exceed the remaining title space.
+Preserve the original sidebar tile styling: full-width square selection when
+expanded, original icon/label spacing and animated collapse.
+iPhone and full-screen Android phones are portrait-only; iPad and Android screens
+with a smallest width of at least 600 dp can rotate. Android multi-window/PiP
+keeps system-managed orientation. These are intentional product changes; device qualification is
+tracked in `docs/EXTERNAL_SYNC_QA.md`.
+
+Startup requests reminder reconciliation only after account-service startup
+returns successfully. A new drain waits for the next rendered frame without
+blocking startup; a request joining an existing drain retains its timing.
+Requests still coalesce and wait for bulk restore. The sweep reads reminder
+metadata only; notification
+planning decrypts content only for active notification candidates, retaining
+locked-note privacy and the existing archived/trashed exclusions. Scheduling
+re-reads each alarm note inside the per-note serializer. Metadata-only notes
+returned by `Note.getForReminderReconciliation()` reject queued mutations,
+deletion, remote commits and direct attachment writes before any database or
+attachment work. Callers must await mutations to handle the resulting StateError.
+
+The `client-sync` release suite includes `home_navigation_layout_test.dart` and
+`home_system_title_test.dart`; `reminders` includes reminder metadata/content
+selection and deferred startup reconciliation coverage.
+The `unit` release suite automatically discovers remaining `test/**/*_test.dart`
+files not assigned to focused suites, using Chrome for browser-only tests. A
+generic tooling check requires every Flutter test to appear in `release-core`.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Flutter 3.47.8, pinned for CI and Xcode Cloud in `.fvmrc` (Dart SDK ^3.13.0) |
+| Rich Text | flutter_quill v11+ (Delta JSON format) |
+| Local DB | SQLite via sqflite (sqflite_common_ffi for desktop/web) |
+| Cloud DB | Firebase Firestore |
+| File Storage | Firebase Storage |
+| Auth | Firebase Auth (email/password, Google, Apple, OAuth) |
+| Backend | Firebase Cloud Functions (Node.js 20, TypeScript) |
+| Payments | in_app_purchase (Apple/Google), Razorpay (web/desktop) |
+| Encryption | XChaCha20-Poly1305, X25519 ECDH, Argon2id (via `cryptography` package) |
+| AI / STT | On-device Whisper (whisper_flutter_new), speech_to_text |
+| Audio | record + audioplayers |
+| State Mgmt | Custom lightweight pub/sub AppState (NO Provider/Riverpod/Bloc) |
+| Testing | flutter_test with transaction, crypto, migration, and widget coverage |
+| Linting | flutter_lints |
+| CI/CD | GitHub Actions (.github/workflows/build-release.yml) |
+
+---
+
+## Directory Structure
+
+```
+better-keep/
+├── lib/                          # Main Dart source
+│   ├── main.dart                 # Entry point: init bindings, Firebase, DB, Auth, E2EE
+│   ├── app.dart                  # MaterialApp wrapper: auth flow, routing, E2EE gating
+│   ├── config.dart               # Constants: DB version, platform detection flags
+│   ├── state.dart                # Global AppState pub/sub store (756 lines)
+│   ├── firebase_options.dart     # Platform-specific public Firebase client config
+│   │
+│   ├── components/               # Reusable UI widgets
+│   │   ├── note_card.dart        # Note card in masonry grid
+│   │   ├── note_audio_player.dart
+│   │   ├── note_image_grid.dart
+│   │   ├── note_attachments_carousel.dart
+│   │   ├── folder_tile.dart
+│   │   ├── adaptive_toolbar.dart
+│   │   ├── adaptive_popup_menu.dart
+│   │   ├── bubble_menu.dart
+│   │   ├── auth_scaffold.dart
+│   │   ├── session_invalid_banner.dart
+│   │   ├── open_in_app_banner.dart
+│   │   ├── sync_progress_widget.dart
+│   │   ├── sketch_tool_popup.dart
+│   │   ├── universal_image.dart
+│   │   ├── user_avatar.dart
+│   │   ├── logo.dart
+│   │   ├── animated_icon.dart
+│   │   ├── otp_input_field.dart
+│   │   └── page_pattern_painter.dart
+│   │
+│   ├── dialogs/                  # Modal dialogs
+│   │   ├── prompt.dart, delete_dialog.dart, loading_dialog.dart
+│   │   ├── labels.dart, color_picker.dart, link_dialog.dart
+│   │   ├── lock_note_dialog.dart, unlock_note_dialog.dart
+│   │   ├── share_note_dialog.dart, export_dialog.dart
+│   │   ├── recovery_key_dialog.dart, otp_dialog.dart
+│   │   ├── reminder.dart, audio_recorder_dialog.dart
+│   │   ├── checkbox_cascade_dialog.dart, paste_dialog.dart
+│   │   └── snackbar.dart
+│   │
+│   ├── models/                   # Data models
+│   │   ├── base_model.dart       # Base class with pub/sub events
+│   │   ├── note.dart             # Note model (~1732 lines, largest file)
+│   │   ├── label.dart
+│   │   ├── note_attachment.dart
+│   │   ├── note_image.dart
+│   │   ├── note_recording.dart
+│   │   ├── sketch.dart
+│   │   ├── reminder.dart
+│   │   ├── share_link.dart
+│   │   ├── note_sync_track.dart
+│   │   ├── file_sync_track.dart
+│   │   ├── label_sync_track.dart
+│   │   └── pending_remote_sync.dart
+│   │
+│   ├── pages/                    # Screen-level widgets
+│   │   ├── home/                 # Main screen (home, notes grid, sidebar, labels, folders)
+│   │   │   ├── home.dart         # Dashboard shell with sidebar + notes grid
+│   │   │   ├── home_layout.dart  # Height, width, safe-area and text-size navigation policy
+│   │   │   ├── note_pane.dart    # iPhone Duo: note beside the list, page beside a note
+│   │   │   ├── notes.dart        # Masonry grid / list / folder view
+│   │   │   ├── sidebar.dart      # Navigation sidebar (labels, archive, trash, folders)
+│   │   │   ├── labels.dart       # Label management
+│   │   │   ├── folder_breadcrumb.dart
+│   │   │   └── view_mode_toggle.dart
+│   │   ├── note_editor/          # Rich-text editor
+│   │   │   ├── note_editor.dart  # Main editor widget using flutter_quill
+│   │   │   └── toolbar/          # Editor toolbar buttons
+│   │   ├── login_page.dart
+│   │   ├── email_login_page.dart
+│   │   ├── email_verification_page.dart
+│   │   ├── password_reset_page.dart
+│   │   ├── pending_approval_page.dart
+│   │   ├── account_recovery_page.dart
+│   │   ├── setup_recovery_key_page.dart
+│   │   ├── user_page.dart
+│   │   ├── settings_page.dart (+ nerd_stats)
+│   │   ├── sketch_page.dart
+│   │   ├── image_viewer.dart
+│   │   ├── content_preview_page.dart
+│   │   ├── about_page.dart
+│   │   └── help_page.dart
+│   │
+│   ├── services/                 # Business logic & platform services
+│   │   ├── external_sync/        # Replica engine, provider adapters, OAuth, encrypted credentials
+│   │   ├── attachment_startup_cleanup.dart # Native reference-aware source maintenance
+│   │   ├── database.dart         # SQLite initialization & migrations (v14)
+│   │   ├── auth_service.dart     # Firebase Auth (1838 lines)
+│   │   ├── note_sync_service.dart
+│   │   ├── note_sync_batch.dart   # Defers the grid and reminders during large initial restores
+│   │   ├── label_sync_service.dart
+│   │   ├── remote_sync_cache_service.dart
+│   │   ├── file_system.dart      # Cross-platform file I/O (conditional imports)
+│   │   ├── file_system_base.dart
+│   │   ├── file_system_io.dart   # Native (IO) implementation
+│   │   ├── file_system_stub.dart # Web fallback
+│   │   ├── web_file_system.dart  # Web implementation
+│   │   ├── alarm_id_service.dart
+│   │   ├── alarm_lifecycle_service.dart # Non-visual alarm completion tracking
+│   │   ├── local_notification_service.dart # Central notification runtime
+│   │   ├── reminder_coordinator.dart # Notification/alarm scheduling orchestration
+│   │   ├── reminder_action_processor.dart # Lightweight background completion transaction
+│   │   ├── reminder_occurrence.dart # Shared occurrence and payload validation
+│   │   ├── reminder_navigation_service.dart # Durable Home-ready notification tap routing
+│   │   ├── reminder_session_service.dart # Cross-isolate signed-in safety signal
+│   │   ├── reminder_sign_out_cleanup_service.dart # Reminder-only delivery cleanup
+│   │   ├── due_reminder_presenter.dart # Editor-scoped due snackbar
+│   │   ├── reminder_action_receipt_service.dart # Idempotent action receipts
+│   │   ├── reminder_sync_codec.dart # Legacy-safe reminder_v2 cloud codec
+│   │   ├── reminder_time_zone_resolver.dart # Full IANA timezone resolution
+│   │   ├── reminder_notification_registration.dart # Pending request verification
+│   │   ├── device_approval_notification_service.dart
+│   │   ├── shared_image_note_service.dart # Atomic image-share import, owned encrypted copies, 50 MiB / 24 MP source limits
+│   │   ├── ios_image_share_inbox.dart # App Group batch import and acknowledgement
+│   │   ├── intent_handler_service.dart
+│   │   ├── reminder_permission_service.dart
+│   │   ├── note_export_service.dart
+│   │   ├── note_share_service.dart
+│   │   ├── export_data_service.dart
+│   │   ├── markdown_import_service.dart
+│   │   ├── encrypted_file_storage.dart
+│   │   ├── local_data_encryption.dart
+│   │   ├── firebase_emulator_config.dart
+│   │   ├── cloud_functions_helper.dart
+│   │   ├── checkbox_service.dart
+│   │   ├── sketch_preview_generator.dart
+│   │   ├── camera_capture.dart + camera_detection.dart (+ stubs)
+│   │   ├── app_install_service.dart (+ stubs)
+│   │   ├── country_detection_service.dart
+│   │   ├── web_oauth.dart (+ stub)
+│   │   ├── web_camera.dart (+ stub)
+│   │   ├── desktop_auth_service.dart
+│   │   │
+│   │   ├── e2ee/                 # End-to-End Encryption
+│   │   │   ├── e2ee_service.dart        # Coordinator (737 lines)
+│   │   │   ├── device_manager.dart      # X25519 keypair, device approval
+│   │   │   ├── note_encryption.dart     # Encrypt/decrypt notes
+│   │   │   ├── crypto_primitives.dart   # XChaCha20-Poly1305, ECDH
+│   │   │   ├── recovery_key.dart        # Argon2id-based recovery
+│   │   │   └── secure_storage.dart      # Platform-specific key storage
+│   │   │
+│   │   ├── monetization/         # Subscriptions & payments
+│   │   │   ├── monetization.dart, plan_service.dart
+│   │   │   ├── subscription_service.dart, subscription_status.dart
+│   │   │   ├── user_plan.dart, entitlements.dart, entitlement_guard.dart
+│   │   │   └── razorpay_service.dart (+ stub + web)
+│   │   │
+│   │   └── whisper/              # On-device AI transcription
+│   │       ├── whisper.dart, whisper_service.dart (+ native + stub)
+│   │       └── whisper_types.dart
+│   │
+│   ├── themes/                   # Theme system
+│   │   ├── dark_themes.dart, light_themes.dart, theme_registry.dart
+│   │
+│   ├── ui/                       # UI utilities
+│   │   ├── custom_icons.dart     # Auto-generated icon font constants
+│   │   └── paywall/              # Subscription paywall UI
+│   │
+│   ├── utils/                    # Utilities
+│   │   ├── encryption.dart       # XOR+SHA-256 note-level encryption
+│   │   ├── quill_config.dart     # FlutterQuill editor configuration
+│   │   ├── quill_image_utils.dart
+│   │   ├── db_init.dart (+ native + web stubs)
+│   │   ├── file_utils.dart
+│   │   ├── image_compressor.dart
+│   │   ├── thumbnail_generator.dart
+│   │   ├── markdown_converter.dart
+│   │   ├── audio_content_utils.dart
+│   │   ├── logger.dart
+│   │   ├── utils.dart
+│   │   ├── week_days.dart
+│   │   └── l10n_helper.dart
+│   │
+│   └── l10n/                     # Localization
+│
+├── functions/                    # Firebase Cloud Functions (TypeScript)
+│   └── src/
+│       ├── index.ts              # Entry point — exports backend functions
+│       └── exports/              # Individual function modules
+│
+├── test/                         # Tests
+├── docs/                         # Technical docs
+│   ├── E2EE.md                   # E2EE architecture deep-dive
+│   ├── CONNECTED_ACCOUNTS.md
+│   └── SERVER_SIDE_SUBSCRIPTION_ENFORCEMENT.md
+├── assets/                       # App assets (icons, fonts, sounds)
+├── android/                      # Android platform project
+├── ios/                          # iOS platform project
+├── macos/                        # macOS platform project
+├── windows/                      # Windows platform project
+├── web/                          # Web platform project + static pages
+├── scripts/                      # Utility scripts
+├── pubspec.yaml                  # Flutter project definition (50+ dependencies)
+├── package.json                  # Node build scripts (root-level)
+```
+
+---
+
+## Key Architecture Patterns
+
+### State Management: AppState Pub/Sub
+
+No Provider, Riverpod, or Bloc. A lightweight global `Map<String, Object?>` with subscribe/notify:
+
+```dart
+// Subscribe
+AppState.subscribe("theme", (key, value) {
+  setState(() => _theme = value as ThemeData);
+});
+
+// Update
+AppState.notify("theme", newTheme);
+
+// Persist
+AppState.set("locale", "en");  // auto-persists to SharedPreferences
+```
+
+Key state keys: `db`, `theme`, `followSystemTheme`, `showNotes`, `filterLabels`, `selectedNotes`, `notesViewMode`, `currentFolder`, `locale`, `editorFullScreen`, alarm settings, sketch tool prefs.
+
+### Routing: Imperative Navigator
+
+No named routes or router package. All navigation uses `Navigator.push()` / `Navigator.pop()`. Global keys stored in AppState:
+- `navKey` — `NavigatorKey` for programmatic navigation from services
+- `scaffoldKey` — `ScaffoldMessengerKey` for showing snackbars from anywhere
+
+### Database: SQLite with Manual Migrations
+
+- **Version**: 14 (handled in `database.dart`)
+- **Tables**: `note`, `label`, `note_image`, `note_recording`, `sketch`, `reminder`, `note_sync_track`, `file_sync_track`, `label_sync_track`, `pending_remote_sync`
+- **External replica tables**: `replica_entities`, `replica_acknowledgements`, `replica_inbox`, `replica_cursors`, `replica_signal_outbox`, `replica_connection_status`, `replica_upload_intents`, `replica_attachment_cache`, `replica_object_sources`, `replica_local_versions`, `replica_write_guard`
+- **Base Model**: `base_model.dart` — all models extend this, get pub/sub events, `toMap()`/`fromMap()`
+- Note content stored as Flutter Quill Delta JSON
+- Locked notes use XOR+SHA-256 encryption via `utils/encryption.dart`
+
+### Reminder Delivery and Notification Actions
+
+- Standard notification reminders use `flutter_local_notifications`; real alarms continue to use `alarm` only on supported mobile platforms.
+- Android/iOS background **Mark as Done** actions use `ReminderActionProcessor`, which initializes only preferences, SQLite, and notification delivery. It atomically validates the occurrence, advances/completes the reminder, records an idempotency receipt, and queues note sync.
+- The main isolate consumes unhandled action receipts on startup/resume, emits note-model updates, and merges only reminder metadata into an open editor so unsaved title/content remain intact.
+- Notification taps are persisted until authentication, database, Home, and root navigation are ready. Occurrence-level activation receipts suppress replayed Android launch intents.
+- `ReminderSessionService` fails closed while signed out. Sign-out cancels reminder and device-approval deliveries in one native call. The device-wide notification_delivery_generation fences reminder taps and background actions across accounts. A pending marker is finalized on restart. A failed OS cancellation allows new deliveries; a late successful cancellation triggers reconciliation of current reminders and approval alerts.
+
+### Sync: Local-First, Newest-Wins
+
+1. SQLite is source of truth; Firestore is sync medium
+2. Push: fetch remote timestamp → if remote newer, abort push + pull remote; if local newer, push
+3. Pull: Firestore live listeners update local DB in real-time
+4. `local_id` mapping prevents duplicates on reinstall
+5. Attachments synced to Firebase Storage (encrypted with UMK when E2EE active)
+
+### External Sync and Large Libraries
+
+- Engine idle waits include queued mode changes, including after failed runs. Permanent provider restrictions and expired authorization stop automatic retries; explicit retry or a replacement connection can resume them.
+- External providers keep acknowledgements separate by connection. Download-only restoration and full sync are serialized; a full request cannot be satisfied by an in-flight download-only pass.
+- Free sessions attempt unfinished initial restoration at most three times per foreground visit. Returning to the foreground renews that allowance without enabling uploads; completed restores stay complete and authorization/permanent-failure/backoff gates remain. A foreground wake queued behind a cancelled pass is retained until the old pass settles. Manual sync remains available; automatic plans retain backoff retries.
+- Small-object prefetch uses existence checks only as hints. Reads still verify ciphertext hashes before use, and cache-write failures stop the pass without acknowledging revisions.
+- Drive, Dropbox, WebDAV and Nextcloud share the engine's bounded small-object download path (eight workers, at most 1 MiB per read). Large objects fall back to verified serial reads. Drive validates all same-name copies before reuse; duplicate commit metadata is excluded from the index because equivalent copies can reference different encrypted objects. Metadata-read limits remain provider-specific.
+- `sync_metadata_index.dart` caches authenticated plaintext revision metadata (opaque IDs, timestamps, encrypted-object references and keyed fingerprints; no note text or attachment contents). A fresh scan always lists current provider files and reuses an entry only when its provider version tokens match: Drive file ID/version, Dropbox ID/rev, or strong DAV ETag. Unknown/changed copies, absent/invalid indexes and older-client writes fall back to the immutable authenticated commits. Notes and attachments remain encrypted; the index never determines inventory or conflict ordering.
+- Newly uploaded commits seed the shared index from successful write-response versions (including Dropbox batches); a first upload can populate the cache without commit read-back. Missing/weak receipts fall back to scanning. Existing libraries repair their index during normal sync, without clearing data. Download-only passes still never write the index. Publication lazy loads are capped at five seconds; optional seeding errors cannot fail acknowledged uploads, and timed-out cache instances are discarded. Exported logs include only metadata hit/read counts, timings and redacted index failure types; successful summaries are sampled once per minute/category, and interrupted scans reset their counters.
+- Metadata index v3 is a linked chain with stable mutable names: `metadata-index-v3.json` and `metadata-index-v3-page-N.json`. Each page is HMAC-bound to its filename/library/connection, capped at 8 MiB/4,096 entries; total pages have no fixed cap. Loaded/acknowledged immutable page contents and links skip unchanged encoding, HMAC and writes even after loading a new session. Tail edits/appends normally write one page; a new page also updates the previous tail link. Stable names avoid per-edit orphan generations. Metadata growth/pruning can move page boundaries and rewrite subsequent pages. Snapshot partitioning/comparison and decoded memory remain proportional to history size; encoding/HMAC is limited to changed pages.
+- Pages are independently authenticated cache hints, not an atomic snapshot. Concurrent/partial writes can mix valid old/new pages; current provider-version/commit-name checks are mandatory and stale/missing entries fall back to original commits. Invalid/missing/duplicate/cyclic pages discard the attempted cache. Reads reject wrong page identity and unsafe filenames. Full scans reload clean caches to repair missing/corrupt pages in the same session; failed reloads retain previously authenticated entries for current-version lookups, invalidate remote page acknowledgements, and require a complete validated scan before republishing; dirty/interrupted snapshots are preserved and incremental checks add no cache reads. Drive tries at most three duplicate page candidates serially with codec validation, pinning only an accepted head. Publication needs a loaded chain or full scan; only full scans prune. Download-only passes never write. Changed pages publish tail first, head last, with the shared five-second write budget and five-minute retry backoff; pending progress is in memory. Each read has a 60-second cap, Drive lookups 10 seconds. Unused trailing slots after shrink and duplicate Drive copies remain until explicit library cleanup; normal sync never deletes provider files. Cleanup accepts exact legacy v1/v2 and current v3 names under the matching library, while normal reads/writes are v3-only. Unshipped v1/v2 caches rebuild; notes, attachments and database formats are unchanged.
+
+- The notes grid mounts cards within a quantized viewport cache window. Lazy cards skip entrance animations; every mutable note update must emit a NoteEvent to invalidate the per-note widget cache. Offscreen card heights remain estimates until measured.
+- Run `integration_test/external_sync_platform_test.dart` with `--dart-define=DRIVE_RESTORE_BENCHMARK=true` for a 1,040-note cold/indexed comparison (add `--dart-define=DRIVE_RESTORE_NOTES=5000` to exercise a linked chain) using real local storage/encryption and a synthetic Drive HTTP boundary. It checks every restored note, metadata request reduction, and unchanged no-echo sync; its fixed request latency is not a live-provider speed guarantee.
+
+### E2EE Architecture
+
+- **User Master Key (UMK)**: 32-byte symmetric key encrypts all note content
+- **Device Keypairs**: X25519 per device, private key in platform secure storage
+- **XChaCha20-Poly1305** for note/attachment encryption with fresh nonces
+- **ECDH** (X25519) for key exchange between devices during device approval
+- **Argon2id** for recovery passphrase-based key derivation
+- Metadata (labels, colors, timestamps) intentionally NOT encrypted (needed for filtering/sorting)
+
+### Platform Abstraction
+
+Conditional imports for web vs native:
+```dart
+import 'file_system_stub.dart' if (dart.library.io) 'file_system_io.dart' if (dart.library.html) 'web_file_system.dart';
+```
+
+`config.dart` caches platform detection: `isDesktop`, `isMobile`, `isWeb`, `isAlarmSupported`.
+
+### Theming
+
+Multiple pre-built dark and light themes in `lib/themes/`. `ThemeRegistry` maps IDs to `ThemeData`. User can pick theme per mode or follow-system.
+
+### Localization
+
+7 languages via ARB files in `lib/l10n/`. Auto-generated Dart classes. Configured in `l10n.yaml`.
+
+### Monetization
+
+- Free (trial) vs Pro
+- Apple IAP + Google Play Billing for mobile
+- Razorpay for web/desktop
+- Server-side enforcement via Firebase Custom Claims (`plan: 'pro'`, `planExpiresAt`)
+- Entitlement guard pattern
+
+---
+
+## Development Commands
+
+```bash
+# Install dependencies
+flutter pub get
+
+# Run the app (requires .env file)
+npm run dev <android|ios|macos|web|windows>
+# Android/iOS auto-select a single matching device and prompt for multiple devices.
+# Override with: npm run dev android -- -d <device-id>
+
+# Static analysis
+npm run check analyze
+
+# Root and Cloud Functions production dependency audits
+npm run check audit
+
+# Tests
+flutter test
+
+# Format code
+dart format lib test
+
+# Firebase emulators (requires Node.js)
+npm run firebase emulators
+
+# Build Cloud Functions
+npm run functions build
+
+# Platform builds (all require .env)
+npm run build android     # flutter build appbundle --release
+npm run build ios         # flutter build ios --release
+npm run build macos       # flutter build macos --release
+npm run build windows     # flutter build windows --release + MSIX
+npm run build web         # flutter build web --release
+npm run build icons       # Generate custom icon font
+
+# Complete portable release gate
+npm run release
+```
+
+---
+
+## Naming & Code Conventions
+
+- **Files**: snake_case (e.g., `note_sync_service.dart`)
+- **Classes**: PascalCase (e.g., `NoteSyncService`)
+- **Widget files**: one widget per file
+- **Imports**: package imports (`package:better_keep/...`)
+- **No comments** in code (keep code self-documenting)
+- **Model pattern**: extend `BaseModel`, implement `toMap()`/`fromMap()`
+- **Service pattern**: singleton-like with static or instance methods, often lazy-initialized via AppState
+- **Dialog pattern**: call via `showDialog()` or `showModalBottomSheet()`, usually passed callbacks for results
+- **Platform stubs**: conditional imports with `dart.library.io` / `dart.library.html`
+- **State updates**: always go through `AppState.notify()` for shared state; use `setState()` for widget-local state
+
+---
+
+## Key Files Reference
+
+| File | Lines | Purpose |
+|---|---|---|
+| `lib/main.dart` | ~150 | App entry: init, bootstrap |
+| `lib/app.dart` | ~400 | MaterialApp, auth routing, lifecycle |
+| `lib/state.dart` | 756 | Global pub/sub state |
+| `lib/models/note.dart` | 1732 | Note model — largest file |
+| `lib/services/auth_service.dart` | 1838 | All auth logic |
+| `lib/services/database.dart` | ~300 | SQLite init + migrations |
+| `lib/services/e2ee/e2ee_service.dart` | 737 | E2EE coordinator |
+| `lib/services/note_sync_service.dart` | ~500 | Firestore note sync |
+| `lib/pages/home/notes.dart` | ~800 | Masonry grid + list + folder views |
+| `lib/pages/note_editor/note_editor.dart` | ~600 | Rich-text editor |
+| `functions/src/index.ts` | ~200 | Cloud Functions entry |
+| `pubspec.yaml` | ~200 | 50+ Flutter dependencies |
+| `docs/E2EE.md` | 363 | E2EE architecture docs |
+
+---
+
+## Database Schema (SQLite v14)
+
+```sql
+note: id, local_id, title, content (Quill Delta JSON), labels (comma-separated),
+      color, is_pinned, is_archived, is_deleted, is_locked, lock_type,
+      reminder, created_at, updated_at, synced_at, ...
+label: id, local_id, name, color, created_at, updated_at, synced_at, ...
+note_image: id, note_id, local_path, remote_path, width, height, ...
+note_recording: id, note_id, local_path, remote_path, duration, transcription, ...
+sketch: id, note_id, data (JSON), background_image, ...
+reminder: id, note_id, alarm_id, time, repeat_days, ...
+reminder_action_receipt: token (PK), note_id, action, ui_consumed_at, created_at
+note_sync_track: id, note_id, synced, updated_at
+file_sync_track: id, attachment_id, attachment_type, synced, ...
+label_sync_track: id, label_id, synced, updated_at
+pending_remote_sync: id, item_id, item_type, operation, ...
+```
+
+---
+
+## Cloud Functions
+
+- **Auth**: custom tokens, OTPs, password reset, account linking, account deletion, token revocation, device approval, start-fresh
+- **Subscriptions**: Razorpay CRUD, Play Store/App Store webhooks, purchase verification, expiry checks, trial grants
+- **Maintenance**: cleanup pending devices, expired shares, failed payments, scheduled deletions
+- **Stats**: public user count endpoint
+
+---
+
+## Important Notes for Development
+
+1. **`.env` required**: All `flutter run`/`flutter build` commands need `--dart-define-from-file=.env`
+2. **`firebase_options.dart` is tracked public client configuration**: Regenerate intentionally with `flutterfire configure`; service-account credentials and OAuth client secrets must remain untracked.
+3. **Desktop DB requires FFI init**: `sqflite_common_ffi` must be initialized before database access on Windows/macOS/Linux
+4. **E2EE is complex**: Read `docs/E2EE.md` before touching encryption code
+5. **State flows through AppState**: Don't introduce new state management patterns — use the existing pub/sub
+6. **Sync tracking tables**: Always update corresponding `*_sync_track` entries when modifying notes/labels/files
+7. **Web has limitations**: File system, camera, OAuth, and Razorpay all use web-specific stubs
+8. **Test risky paths**: Run focused regressions for sync, key recovery, account transitions, and database upgrades. Local tests do not replace native/provider acceptance checks.
+9. **No comments**: The codebase avoids comments — follow this convention
+10. **Keep this file updated**: After adding/removing files, changing architecture, or updating dependencies, update `AGENTS.md`
+
+---
+
+*External-sync context updated: 2026-11-14; unrelated module counts are historical.*
+
+## External sync and release boundaries
+
+- Drive, Dropbox, Nextcloud and WebDAV use a shared replica engine with independent provider acknowledgements, cursors and retry state. Switching providers must not reuse another provider's acknowledgement.
+- SQLite v14 adds `replica_upload_intents` to resume interrupted outgoing work for each account, library and connection generation. SQLite v13 retains the v12 local mutation journal and replica tables and adds `replica_cursors.checked_notes`. A non-null count (including the migration default 0) means discovery is incomplete; null means discovery finished and pending downloads can resume first. Each page and checkpoint commit together. On a listing failure, valid staged notes are applied before the original failure is reported; cancellation never starts fallback work. Slow partial scans still finish discovery before normal downloads so their totals remain stable. Built-in Firebase sync keeps its existing remote format, with transactional version checks; concurrent pushes are bounded and drain before teardown.
+- Free supports manual external sync. Lite/Pro add automatic external updates. Pro is required for built-in uploads, not downloads. Paused built-in sync still downloads notes, media, labels and ordering on every plan. `firebaseDownloads` in the confirmed sync preference prevents an external-provider pause/clear from silently attaching Firebase; legacy missing values retain built-in recovery. Deploy its rules and the Functions clear-selection writer before the client. Local unsynced edits remain queued.
+- New local note IDs are reserved through the shared Note allocator by save, lock, and external restore. The restore path retains its sync-tracking maximum and existing-identity reuse rules. IDs are opaque, not timestamps; the process reservation can advance beyond the clock across rollbacks/account switches. Use created_at for creation time. Firebase incoming IDs remain hints: row and sync-track ownership are checked before attachment preparation and again inside the commit. Identity collisions retry through ID resolution instead of replacing a different local note.
+- Device-list rendering uses `UserDevicesSection` for the compact three-row profile list and full device route. Main-device authorization remains in the existing device manager.
+- Credentials are encrypted on the client with purpose-derived user keys. The OAuth exchange function sees tokens transiently, but does not persist or log them. Notes, media and master keys remain end-to-end encrypted.
+- On iOS, a durable install marker in Library/BetterKeepInstallation survives account sign-out but not uninstall. Missing legacy launch preferences alone never justify clearing Keychain identities: scoped account preferences or existing local databases/library directories preserve them. An unreadable/corrupt install marker or a failed filesystem/plugin library probe is uncertain evidence: it never authorizes deleting keys. Without existing account/library evidence, the app signs out only and repairs the marker. Key deletion, sign-out, and durable-marker persistence failures still require Retry. Confirmed fresh installs clear both local key scopes and sign out before authenticated writers start. The durable marker is committed before new sign-in; failure of the secondary legacy preference write does not block startup or cause repeated resets.
+- Empty restored libraries show startup verification progress while their keys are usable; populated libraries keep the status pill. "Checking Notes" is reserved for discovery without an existing provider checkpoint; resumed scans, later scans and label/order checks say "Syncing". Manual refresh coalesces and waits up to 30 seconds for local startup and provider readiness independently of Firebase availability, retries recoverable initialization once, joins a restore that starts while queued, and offers a working Retry if readiness stalls. Offline/account changes cancel quietly; actual sign-in/approval requirements take precedence over transfer feedback. Disabling progress hides placeholder text while retaining the loading animation. Unconfirmed/off/built-in provider selection does not manufacture external-provider progress.
+- Approved browser device identity can survive reload in IndexedDB. The unwrapped master key and pending pairing secrets live in memory. Approved browsers can open the matching local library offline after a cold start. Cloud transfers require online approval verification. A read-only legacy WEB_STORAGE_KEY decoder preserves existing users until a recovery passphrase is saved; never rotate/remove that compatibility value prematurely.
+- New device approvals require QR pairing or full security-code verification. Legacy self-declared device status is not proof of credential access; capabilities remain required.
+- See docs/EXTERNAL_SYNC_IMPLEMENTATION.md and docs/EXTERNAL_SYNC_QA.md for compatibility and outstanding release gates.
+
+- Native startup source cleanup runs only after recovery journals drain, before UI/sync. It preserves note references, stays inside the app document directory and bounds each pass. Browser source collection and remote history compaction remain separate release risks.
+- DAV listing parsing is streamed with bounded input and one snapshot per continuation sequence; large-history limits still apply.
+
+## Image sharing into notes
+
+`app_links` owns deep links on iOS and Android; native Flutter deep linking is
+disabled to prevent duplicate navigation routes. Image imports display the
+localized processing indicator during actual import until the saved note opens
+or import fails; startup waiting and empty inbox checks do not block the UI.
+
+Apple debug builds using a LAN Firebase emulator route Storage through a local
+loopback relay (`firebase_storage_emulator_transport_io.dart`, port 49199).
+Firebase iOS 12.17 strips Auth on direct non-loopback HTTP. The relay accepts
+only unsigned emulator tokens for the selected project, strips App Check, and
+forwards to the selected emulator without changing Storage rules. Live builds
+and loopback/Android/web emulator routes do not use it. Verify native uploads
+with `integration_test/storage_emulator_lan_test.dart` and a LAN EMULATOR_HOST;
+the fixture uses a separate demo project and cleans up its test objects/users.
+
+Android SEND/SEND_MULTIPLE image/* shares create one image note per batch.
+The Android sharing plugin caches by display name: repeated source paths in one
+batch are rejected before import, with a message to share images individually,
+to avoid silently saving overwritten images. Distinct paths with matching filenames
+remain valid. This does not repair the upstream cache or guarantee isolation
+between overlapping share deliveries.
+iOS
+ShareExtension queues images in group.io.foxbiz.betterKeep.imageShare; the app
+imports after startup services and a UI frame (with a five-second frame watchdog),
+then acknowledges by batch UUID. A remounted startup owner can replace an
+abandoned readiness future without adding another share subscription.
+Successful image shares open the saved note editor. The iOS extension previews
+selected images using sequential, downsampled thumbnails and waits for Create
+note before persisting the batch. Closing the preview creates no note. After
+the button tap it copies images and attempts betterkeep://image-share using the installed
+sharing plugin's responder-chain approach. Apple does not officially support
+this extension-to-app launch; retain the queued batch if opening fails and
+validate physical-device behavior and App Review before release.
+ios/Shared/ImageShareInbox.swift owns the inbox and bounded provider transfer.
+Temporary App Group originals use complete iOS Data Protection and are excluded
+from backups, but are not encrypted with the app's local-data key. Import writes
+owned copies through the normal attachment encryption pipeline. Cleanup runs on
+inbox access: incomplete batches expire after one hour, all batches after seven
+days. Three explicit invalid-input failures (FormatException, including its
+SharedImageImportException wrapper) quarantine a batch; users can share again.
+I/O, session cancellation, and unknown failures remain retryable within the
+retention window and notify once per batch per process. Local imports also work
+while signed out; the cloud-operation guard is not a login requirement.
+Native inbox reads distinguish missing from unreadable metadata; unreadable
+batches remain retryable without blocking other ready shares. The seven-day
+retention still applies. Extension progress says “Saving images…” during copying
+and “Opening Better Keep…” only during handoff.
+No background expiration is guaranteed if neither app nor extension is opened.
+`npm test image-share` runs Dart regressions, native Swift tests on macOS, and
+archive-signing policy tests through an available Python 3 runtime. The macOS
+image-share-native PR job is a dependency of the portable release gate. Xcode Cloud ci_post_xcodebuild.sh verifies App Group
+entitlements in the signed app, extension, and provisioning profiles. Archive-only
+jobs skip signing validation when no export is declared; distribution workflows
+must set IMAGE_SHARE_REQUIRE_SIGNED_EXPORT=1. Auth restoration failures still
+schedule local intent startup after a UI frame. A signed
+archive and physical-device acceptance remain required; simulator tests cannot
+prove distribution provisioning.
+
+Image-share source map: `lib/services/intent_handler_service.dart` coordinates
+startup and incoming shares; `shared_image_note_service.dart` owns note creation;
+`ios_image_share_inbox.dart` handles acknowledgement and retry classification;
+`lib/components/image_share_progress.dart` displays import progress.
+`ios/ShareExtension/` owns extension UI, localization, and target configuration;
+`ios/Shared/ImageShareInbox.swift` owns native storage and transfer cancellation.
+`firebase_storage_emulator_transport{,_io,_stub}.dart` in `lib/services/` selects
+and implements the debug relay. Regression tests live in
+`test/{intent_handler_pending,shared_image_note_service,ios_image_share_inbox,firebase_storage_emulator_transport}_test.dart`,
+`test/native/image_share_test.swift`, and `test/tool/image_share_*`.
+The reproducible iOS preview/cold/warm/cancel/copy-failure UI gate is documented in
+`test/ios_image_share_ui/README.md`. Its disposable simulator fixture requires a
+test-only LOCAL_DATA_KEY and asserts encrypted attachments before reporting success.
+
+## Account deletion
+
+- `functions/src/accountDeletionLifecycle.ts`: atomic OTP/schedule/audit proof, transactional
+  cancellation, claim leases, token-drain checkpoint, and reminder proof validation.
+- Backend-only collections: `accountDeletionRequests` (incident audit retention hold) and
+  `accountDeletionWorker/scan` (bounded worker pagination cursor).
+- Deletion and terminal audit cleanup run without environment enable flags. Verify Scheduler state
+  and deploy the retention indexes before cleanup; see the operations guide for rollout requirements.
+- `functions/scripts/runTests.mjs` keeps test manifests out of package.json. The isolated
+  `tool/test_account_deletion.sh` suite participates in `npm run release` through the
+  `firebase-emulator-deletion` suite.
+- See `docs/ACCOUNT_DELETION.md` for rules-first rollout, 65-minute token drain before purge,
+  partial-deletion recovery, shared-data cleanup, and staging/retention limitations.
+
+- Direct callable HTTP errors on iOS/macOS/Windows preserve structured details via
+  `parseCloudFunctionError` in `lib/services/cloud_functions_helper.dart`. The mapper's
+  regression tests in `test/cloud_functions_helper_test.dart` run in the release gate.
+
+
+Device pairing supports QR and an eight-digit client-only SRP-6a fallback. The server
+relays public values/evidence and encrypted handoff data, never the code or master key.
+Deletion scheduling enters a durable revoking phase before cancellation/sign-in can
+resume; audit triggers handle session revocation and cancellation notifications.
+
+- External clear-data cleanup is scoped to the chosen replica: draining must not wait for another active provider. OTP and epoch fencing remain required. Drive validates listing batches before four concurrent deletes; Dropbox uses asynchronous delete_batch/check (two-second polling, success or missing-root required). The UI shows phases and provider-specific pause wording; after verification, users may close the dialog while account-scoped cleanup continues. Unconfirmed verification requests a fresh code, and Details prioritizes cleanup-specific manual-retry guidance. Verification/drain/finalization steps time out after 45 seconds; cleanup has a five-minute operation deadline and interrupted clears remain retryable without a false success.

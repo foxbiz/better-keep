@@ -16,6 +16,7 @@ export type ProductFacts = {
   playStoreUrl: string;
   microsoftStoreUrl: string;
   webAppUrl: string;
+  webPrices: Record<'lite' | 'pro', Record<'USD' | 'INR', { monthly: number; yearly: number }>>;
   publicStatsUrl: string;
   githubUrl: string;
   license: {

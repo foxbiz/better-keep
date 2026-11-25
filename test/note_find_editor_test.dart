@@ -46,7 +46,7 @@ void main() {
       isTrue,
     );
 
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(
       editor.controller.selection,
       const TextSelection(baseOffset: 0, extentOffset: 5),
@@ -123,7 +123,7 @@ void main() {
     tester,
   ) async {
     await _pumpEditor(tester, body: 'alpha beta alpha');
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.controller.updateSelection(
       const TextSelection(baseOffset: 11, extentOffset: 16),
       ChangeSource.local,
@@ -270,7 +270,7 @@ void main() {
     tester,
   ) async {
     await _pumpEditor(tester, body: 'alpha beta alpha');
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.focusNode.requestFocus();
     await tester.pump();
 
@@ -336,7 +336,7 @@ void main() {
     tester,
   ) async {
     await _pumpEditor(tester, body: 'alpha', platform: TargetPlatform.windows);
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.focusNode.requestFocus();
     await tester.pump();
 
@@ -368,9 +368,76 @@ void main() {
     );
   });
 
+  testWidgets('the find bar stays readable on a light note in a dark theme', (
+    tester,
+  ) async {
+    const noteColor = Color(0xFFE0EFE7);
+    await _pumpEditor(
+      tester,
+      body: 'alpha alpha',
+      brightness: Brightness.dark,
+      color: noteColor,
+    );
+    await tester.tap(find.byKey(const ValueKey('note_editor_search_action')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('note_find_query')),
+      'alpha',
+    );
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pumpAndSettle();
+    expect(find.text('1/2'), findsOneWidget);
+
+    double contrast(Color? color) {
+      final visible = Color.alphaBlend(color!, noteColor);
+      final a = visible.computeLuminance() + 0.05;
+      final b = noteColor.computeLuminance() + 0.05;
+      return a > b ? a / b : b / a;
+    }
+
+    final query = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(const ValueKey('note_find_query')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    final count = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const ValueKey('note_find_result_count')),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(contrast(count.text.style?.color), greaterThan(4.5));
+    expect(contrast(query.style.color), greaterThan(4.5));
+    for (final icon in [Icons.close, Icons.tune, Icons.keyboard_arrow_down]) {
+      final glyph = tester.widget<RichText>(
+        find.descendant(
+          of: find.descendant(
+            of: find.byKey(const ValueKey('note_find_bar')),
+            matching: find.byIcon(icon),
+          ),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(
+        contrast(glyph.text.style?.color),
+        greaterThan(3),
+        reason: '$icon',
+      );
+    }
+
+    // The options menu has the app's own background and keeps its colors.
+    await tester.tap(find.byKey(const ValueKey('note_find_options')));
+    await tester.pumpAndSettle();
+    final menu = tester.element(
+      find.byKey(const ValueKey('note_find_option_case')),
+    );
+    expect(Theme.of(menu).colorScheme.onSurface, isNot(Colors.black));
+  });
+
   testWidgets('Cmd+Option+F opens replace on macOS', (tester) async {
     await _pumpEditor(tester, body: 'alpha');
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.focusNode.requestFocus();
     await tester.pump();
 
@@ -395,6 +462,8 @@ Future<void> _pumpEditor(
   TargetPlatform platform = TargetPlatform.macOS,
   TextDirection textDirection = TextDirection.ltr,
   Locale locale = const Locale('en'),
+  Brightness brightness = Brightness.light,
+  Color color = Colors.transparent,
 }) async {
   if (configureView) {
     tester.view.physicalSize = const Size(1000, 900);
@@ -412,7 +481,7 @@ Future<void> _pumpEditor(
   ]);
   await tester.pumpWidget(
     MaterialApp(
-      theme: ThemeData(platform: platform),
+      theme: ThemeData(platform: platform, brightness: brightness),
       locale: locale,
       localizationsDelegates: betterKeepLocalizationDelegates,
       supportedLocales: betterKeepSupportedLocales,
@@ -422,6 +491,7 @@ Future<void> _pumpEditor(
           note: Note(
             title: 'Search note',
             content: content,
+            color: color,
             readOnly: readOnly,
             trashed: trashed,
           ),

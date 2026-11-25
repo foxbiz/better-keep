@@ -1,11 +1,10 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import CallToAction from '../components/CallToAction.astro';
+import DownloadSection from '../components/DownloadSection.astro';
 import FeatureGrid from '../components/FeatureGrid.astro';
 import HomeHero from '../components/HomeHero.astro';
 import MigrationSection from '../components/MigrationSection.astro';
-import PlatformLinks from '../components/PlatformLinks.astro';
-import ScreenshotRail from '../components/ScreenshotRail.astro';
+import PrivacySection from '../components/PrivacySection.astro';
 import { product } from '../data/product';
 
 const schemas = [
@@ -59,9 +58,8 @@ const schemas = [
   schemas={schemas}
 >
   <HomeHero />
-  <ScreenshotRail />
   <FeatureGrid />
-  <PlatformLinks />
+  <PrivacySection />
   <MigrationSection />
-  <CallToAction />
+  <DownloadSection />
 </BaseLayout>

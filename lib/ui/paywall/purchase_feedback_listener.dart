@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:better_keep/pages/user_page.dart';
 import 'package:better_keep/services/monetization/plan_service.dart';
 import 'package:better_keep/services/monetization/subscription_service.dart';
 import 'package:better_keep/services/monetization/subscription_status.dart';
@@ -72,6 +73,11 @@ Future<void> _openManagement(
   BuildContext context, {
   required bool currentStore,
 }) async {
+  if (!currentStore && PlanService.instance.status.isRazorpaySubscription) {
+    await Navigator.of(context)
+        .push<void>(MaterialPageRoute(builder: (_) => const UserPage()));
+    return;
+  }
   final result = currentStore
       ? await SubscriptionService.instance
             .openCurrentStoreSubscriptionManagement()
@@ -99,6 +105,30 @@ Future<void> presentPurchaseOutcome(
 
   while (navigator.mounted) {
     switch (outcome) {
+      case PurchaseOutcome.changePlanRequired:
+        final changeContext = navigator.context;
+        if (!changeContext.mounted) return;
+        final manage = await showDialog<bool>(
+          context: changeContext,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(dialogContext.l10n.manageSubscription),
+            content: Text(dialogContext.l10n.subscriptionChangePlan),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(dialogContext.l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(dialogContext.l10n.manageSubscription),
+              ),
+            ],
+          ),
+        );
+        if (manage == true && navigator.mounted) {
+          await _openManagement(navigator.context, currentStore: false);
+        }
+        return;
       case PurchaseOutcome.activated:
       case PurchaseOutcome.restored:
       case PurchaseOutcome.alreadyActive:
@@ -112,7 +142,7 @@ Future<void> presentPurchaseOutcome(
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
             icon: const Icon(Icons.workspace_premium_rounded),
-            title: Text(dialogContext.l10n.welcomeToProMessage),
+            title: Text(dialogContext.l10n.subscriptionActiveTitle),
             content: Text(outcome.localized(dialogContext.l10n)),
             actions: [
               if (shouldOfferManagement)

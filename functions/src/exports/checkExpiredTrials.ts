@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db, emailPassword } from "../config";
+import { generateTransactionalEmail } from "../email_templates";
 import { reconcileUserEntitlement } from "../subscriptionReconciler";
 import { sendEmail } from "../utils";
 
@@ -76,7 +77,7 @@ export default onSchedule(
 
 					// Send trial expired email
 					await sendTrialExpiredEmail(email, data.displayName || "there");
-					console.log(`Sent trial expired email to ${email}`);
+					console.log("Sent trial expired email");
 
 					// Mark as notified
 					await doc.ref.update({
@@ -84,10 +85,7 @@ export default onSchedule(
 						expiryEmailSentAt: Timestamp.now(),
 					});
 				} catch (emailError) {
-					console.error(
-						`Failed to process expired trial for ${email}:`,
-						emailError,
-					);
+					console.error("Failed to process expired trial:", emailError);
 				}
 			}
 
@@ -111,62 +109,25 @@ async function sendTrialExpiredEmail(
 		from: `"${senderName}" <${senderEmail}>`,
 		to: email,
 		subject: "Your Better Keep Pro Trial Has Ended",
-		html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-        <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-          <h1 style="color: #333; font-size: 24px; margin-bottom: 16px;">Your Pro Trial Has Ended</h1>
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">
-            Hi ${displayName},
-          </p>
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">
-            Your Better Keep Pro trial has ended. We hope you enjoyed the premium features!
-          </p>
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">
-            You can continue using Better Keep with the free plan, or upgrade to Pro to keep all the premium features:
-          </p>
-          <ul style="color: #333; font-size: 14px; line-height: 1.8;">
-            <li>🔒 Unlimited locked notes</li>
-            <li>☁️ Cloud sync across devices with end-to-end encryption</li>
-          </ul>
-          <div style="text-align: center; margin: 24px 0;">
-            <a href="https://betterkeep.app/pricing" style="display: inline-block; background: linear-gradient(135deg, #6750A4 0%, #9C27B0 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-              Upgrade to Pro
-            </a>
-          </div>
-          <p style="color: #666; font-size: 14px; line-height: 1.5;">
-            Thank you for trying Better Keep Pro!
-          </p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-          <p style="color: #999; font-size: 12px;">
-            Better Keep by Foxbiz Software Pvt. Ltd.
-          </p>
-        </div>
-      </body>
-      </html>
-    `,
-		text: `
-Your Better Keep Pro Trial Has Ended
-
-Hi ${displayName},
-
-Your Better Keep Pro trial has ended. We hope you enjoyed the premium features!
-
-You can continue using Better Keep with the free plan, or upgrade to Pro to keep all the premium features:
-- Unlimited locked notes
-- Cloud sync across devices with end-to-end encryption
-
-Upgrade at: https://betterkeep.app/pricing
-
-Thank you for trying Better Keep Pro!
-
-Better Keep by Foxbiz Software Pvt. Ltd.
-    `,
+		...generateTransactionalEmail({
+			title: "Your Pro trial has ended",
+			category: "Subscription",
+			paragraphs: [
+				`Hi ${displayName},`,
+				"Your Better Keep Pro trial has ended. You can continue using the free plan, or upgrade to Pro to keep these features.",
+			],
+			list: {
+				title: "With Better Keep Pro",
+				items: [
+					"Unlimited locked notes",
+					"Cloud sync across devices with end-to-end encryption",
+				],
+			},
+			action: {
+				label: "View Pro plans",
+				url: "https://betterkeep.app/pricing",
+			},
+		}),
 	};
 
 	await sendEmail(mailOptions);

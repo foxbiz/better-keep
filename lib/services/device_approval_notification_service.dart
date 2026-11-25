@@ -44,6 +44,9 @@ class DeviceApprovalNotificationService {
     E2EEService.instance.deviceManager.pendingApprovals.addListener(
       _onPendingApprovalsChanged,
     );
+    LocalNotificationService.instance.lateCancellation.addListener(
+      _restorePendingAlerts,
+    );
     _listenerAttached = true;
 
     // Store initial state
@@ -61,9 +64,18 @@ class DeviceApprovalNotificationService {
       E2EEService.instance.deviceManager.pendingApprovals.removeListener(
         _onPendingApprovalsChanged,
       );
+      LocalNotificationService.instance.lateCancellation.removeListener(
+        _restorePendingAlerts,
+      );
       _listenerAttached = false;
     }
     _initialized = false;
+    _lastKnownApprovals = [];
+  }
+
+  void _restorePendingAlerts() {
+    _lastKnownApprovals = [];
+    _onPendingApprovalsChanged();
   }
 
   void _onPendingApprovalsChanged() {
@@ -140,14 +152,6 @@ class DeviceApprovalNotificationService {
     await LocalNotificationService.instance.cancelDeviceApproval(
       _notificationId(deviceId),
     );
-  }
-
-  /// Cancel all device approval notifications
-  Future<void> cancelAllNotifications() async {
-    for (final approval in _lastKnownApprovals) {
-      await cancelNotification(approval.deviceId);
-    }
-    _lastKnownApprovals = [];
   }
 
   int _notificationId(String deviceId) {

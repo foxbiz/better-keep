@@ -162,3 +162,57 @@ test("deleted Firebase users are terminal claim-sync outcomes", () => {
 	assert.equal(isDeletedAuthUserError({ code: "auth/internal-error" }), false);
 	assert.equal(isDeletedAuthUserError(new Error("user-not-found")), false);
 });
+
+
+test("Pro wins over longer Lite access even when Lite was primary", () => {
+ const lite = {...record("razorpay", 365), plan: "lite"};
+ const pro = record("app_store", 3);
+ const selected = selectEffectiveEntitlements({now, current: lite,
+  providerRecords: [{id:"lite",data:lite},{id:"pro",data:pro}]});
+ assert.equal(selected.primary.evaluated.plan, "pro");
+ assert.equal(selected.primary.evaluated.expiresAt.toMillis(), expiry(3).toMillis());
+ const downgraded = selectEffectiveEntitlements({now, current: pro,
+  providerRecords: [{id:"lite",data:lite},{id:"pro",data:record("app_store",-1)}]});
+ assert.equal(downgraded.primary.evaluated.plan, "lite");
+});
+
+
+test("reconciliation writes the resolved tier to both status and Auth claims", async () => {
+ const fs = require("node:fs");
+ const vm = require("node:vm");
+ const {createRequire} = require("node:module");
+ const modulePath = require.resolve("../lib/subscriptionReconciler");
+ const localRequire = createRequire(modulePath);
+ for (const plan of ["free", "lite", "pro"]) {
+  let status, claims;
+  const document = (name) => ({
+   collection: () => ({doc: () => document("status")}),
+   get: async () => ({data: () => undefined}),
+   set: async (data) => {if (name === "status") status = data;},
+   delete: async () => {},
+  });
+  const records = plan === "free" ? [] : [{...record("app_store", 1), plan}];
+  const db = {collection: () => ({
+   doc: name => document(name),
+   where: () => ({get: async () => ({docs: records.map((data, i) => ({id: String(i), data: () => data}))})}),
+  })};
+  const auth = {
+   getUser: async () => ({customClaims: {plan: "pro", unrelated: true}}),
+   setCustomUserClaims: async (_, value) => {claims = value;},
+  };
+  const module = {exports: {}};
+  vm.runInNewContext(fs.readFileSync(modulePath, "utf8"), {
+   module, exports: module.exports,
+   require: (name) => {
+    if (name === "./config") return {db, auth};
+    assert.ok(["node:crypto", "firebase-admin/firestore", "./adminConfig", "./customClaims", "./subscriptionEntitlement"].includes(name));
+    return localRequire(name);
+   },
+  });
+  const result = await module.exports.reconcileUserEntitlement("memory-only", now, auth);
+  assert.equal(result.plan, plan);
+  assert.equal(status?.plan ?? "free", plan);
+  assert.equal(claims.plan, plan);
+  assert.equal(claims.unrelated, true);
+ }
+});

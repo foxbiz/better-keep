@@ -72,6 +72,9 @@ const targets = {
 	web: defineTarget("Build the marketing site and release web application.", (extraArgs) => [
 		processStep("./scripts/build_web.sh", extraArgs),
 	]),
+	"web-beta": defineTarget("Build an isolated beta web client (pass a release ID).", (extraArgs) => [
+		processStep("node", ["tool/beta_web.mjs", "build", ...extraArgs]),
+	]),
 	windows: defineTarget("Build the release Windows MSIX package.", (extraArgs) => [
 		flutterBuild("windows", extraArgs),
 		processStep("dart", ["run", "msix:create", "--build-windows=false"]),

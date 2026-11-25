@@ -1,13 +1,82 @@
 import assert from "node:assert/strict";
-import {EventEmitter} from "node:events";
+import {spawn} from "node:child_process";
+import {EventEmitter, once} from "node:events";
 import {mkdtemp, rm, writeFile} from "node:fs/promises";
+import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {delimiter, join} from "node:path";
+import {createInterface} from "node:readline";
 import test from "node:test";
 import {
 	actionableProcessStartError,
 	runChildProcessWithOutput,
 } from "../../tool/process_runner.mjs";
+
+test("isolated child gets one terminal interrupt and releases its port", {
+	skip: process.platform === "win32",
+	timeout: 10000,
+}, async (context) => {
+	const childSource = `
+		const server = require('node:net').createServer();
+		let signals = 0;
+		process.on('SIGINT', () => {
+			signals++;
+			if (signals === 1) setTimeout(() => server.close(() => {
+				console.log(JSON.stringify({signals}));
+				process.exit(0);
+			}), 200);
+		});
+		server.listen(0, '127.0.0.1', () => console.log(JSON.stringify({
+			pid: process.pid, port: server.address().port
+		})));
+	`;
+	const runnerUrl = new URL("../../tool/process_runner.mjs", import.meta.url)
+		.href;
+	const wrapper = spawn(
+		process.execPath,
+		[
+			"--input-type=module",
+			"-e",
+			`
+		import {runChildProcess} from ${JSON.stringify(runnerUrl)};
+		process.exitCode = await runChildProcess({
+			command: process.execPath,
+			args: ['-e', ${JSON.stringify(childSource)}],
+			detached: true,
+		});
+	`,
+		],
+		{detached: true, stdio: ["ignore", "pipe", "pipe"]},
+	);
+	let childPid;
+	const lines = createInterface({input: wrapper.stdout});
+	context.after(() => {
+		lines.close();
+		for (const pid of [childPid, wrapper.pid]) {
+			if (!pid) continue;
+			try {
+				process.kill(pid, "SIGKILL");
+			} catch (error) {
+				if (error.code !== "ESRCH") throw error;
+			}
+		}
+	});
+	const exited = once(wrapper, "exit");
+	const iterator = lines[Symbol.asyncIterator]();
+	const ready = JSON.parse((await iterator.next()).value);
+	childPid = ready.pid;
+	// Equivalent to Ctrl+C: signal the foreground wrapper's whole process group.
+	process.kill(-wrapper.pid, "SIGINT");
+	assert.deepEqual(JSON.parse((await iterator.next()).value), {signals: 1});
+	assert.deepEqual(await exited, [0, null]);
+	childPid = undefined;
+	const probe = createServer();
+	await new Promise((resolve, reject) => {
+		probe.once("error", reject);
+		probe.listen(ready.port, "127.0.0.1", resolve);
+	});
+	await new Promise((resolve) => probe.close(resolve));
+});
 
 function createChild() {
 	const child = new EventEmitter();

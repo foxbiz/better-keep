@@ -1,10 +1,121 @@
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 void main() {
+  test('Firebase signup, OAuth collision and malformed email have distinct guidance', () {
+    for (final (provider, code, kind) in [
+      ('password', 'email-already-in-use', AuthFailureKind.accountExists),
+      (
+        'google',
+        'account-exists-with-different-credential',
+        AuthFailureKind.differentSignInMethod,
+      ),
+      ('password', 'invalid-email', AuthFailureKind.invalidEmail),
+    ]) {
+      expect(
+        resolveSignInFailure(
+          provider: provider,
+          error: FirebaseAuthException(code: code),
+        ),
+        kind,
+      );
+    }
+  });
+  test(
+    'Auth wrapping preserves the deletion marker and paused callable reason',
+    () {
+      expect(
+        isAccountDeletionInProgress(
+          FirebaseAuthException(
+            code: 'internal-error',
+            message: '[account-deletion-in-progress] localized text',
+          ),
+        ),
+        true,
+      );
+      expect(
+        isAccountDeletionPaused(
+          FirebaseFunctionsException(
+            code: 'unavailable',
+            message: 'Paused',
+            details: {'reason': 'account-deletion-paused'},
+          ),
+        ),
+        true,
+      );
+      expect(
+        isAccountDeletionPaused(
+          FirebaseFunctionsException(code: 'unavailable', message: 'Retry'),
+        ),
+        false,
+      );
+    },
+  );
+  test(
+    'deletion errors are actionable and unrelated preconditions stay generic',
+    () {
+      final error = FirebaseFunctionsException(
+        message: 'Synthetic test failure',
+        code: 'failed-precondition',
+        details: {'reason': 'account-deletion-in-progress'},
+      );
+      expect(isAccountDeletionInProgress(error), true);
+      expect(
+        resolveSignInFailure(provider: 'google', error: error),
+        AuthFailureKind.deletionInProgress,
+      );
+      expect(
+        isAccountDeletionInProgress(
+          FirebaseFunctionsException(
+            message: 'Synthetic test failure',
+            code: 'failed-precondition',
+          ),
+        ),
+        false,
+      );
+      expect(
+        resolveSignInFailure(
+          provider: 'google',
+          error: FirebaseAuthException(
+            code: 'internal-error',
+            message: 'Account deletion has already started. Contact support.',
+          ),
+        ),
+        AuthFailureKind.deletionInProgress,
+      );
+    },
+  );
+  test(
+    'only deletion cooldown errors allow using the previously requested code',
+    () {
+      expect(
+        deletionOtpCooldown(
+          FirebaseFunctionsException(
+            message: 'Synthetic test failure',
+            code: 'resource-exhausted',
+            details: {
+              'reason': 'deletion-otp-cooldown',
+              'retryAfterSeconds': 30,
+            },
+          ),
+        )?['retryAfterSeconds'],
+        30,
+      );
+      expect(
+        deletionOtpCooldown(
+          FirebaseFunctionsException(
+            message: 'Synthetic test failure',
+            code: 'resource-exhausted',
+          ),
+        ),
+        null,
+      );
+    },
+  );
   test('Apple invalid credential resolves to a stable failure kind', () {
     final failure = resolveSignInFailure(
       provider: 'apple',
@@ -27,6 +138,18 @@ void main() {
     );
 
     expect(failure, AuthFailureKind.invalidCredentials);
+  });
+
+  test('OAuth token failures never blame an email password', () {
+    for (final provider in ['google', 'github', 'facebook', 'twitter']) {
+      expect(
+        resolveSignInFailure(
+          provider: provider,
+          error: FirebaseAuthException(code: 'invalid-credential'),
+        ),
+        AuthFailureKind.providerVerification,
+      );
+    }
   });
 
   test('native Google cancellation resolves to cancelled', () {

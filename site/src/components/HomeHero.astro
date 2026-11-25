@@ -1,10 +1,18 @@
 ---
-import { heroScreenshots } from '../data/home';
-import DeviceFrame from './DeviceFrame.astro';
+import Icon from './Icon.astro';
 import StoreActions from './StoreActions.astro';
 import UserCount from './UserCount.astro';
+import { heroVideoCatalog, type HeroLayout } from '../lib/hero-video-source';
 
-const positions = ['left', 'primary', 'right'] as const;
+const posterSrcset = (layout: HeroLayout, format: 'avif' | 'webp') =>
+  heroVideoCatalog[layout].posterWidths
+    .map((width) => `/media/video/hero-${layout}-${width}.${format} ${width}w`)
+    .join(', ');
+const narrow = '(max-width: 680px)';
+const posters = [
+  { layout: 'tall', media: narrow, sizes: 'min(82vw, 340px)', width: 720, height: 1280 },
+  { layout: 'wide', media: undefined, sizes: 'min(100vw, 1120px)', width: 1280, height: 720 }
+] as const;
 ---
 
 <section class="home-hero">
@@ -13,28 +21,143 @@ const positions = ['left', 'primary', 'right'] as const;
       <p class="eyebrow">Private, offline-friendly notes</p>
       <h1>Quick notes. <span>Room to think.</span></h1>
       <p class="home-hero__lede">
-        Your free note-taking app for ideas, checklists, and everyday plans.
-        Write offline with rich-text notes, photos, sketches, and voice recordings.
+        Free rich-text notes, checklists, sketches, and voice recordings for
+        ideas and everyday plans.
       </p>
-      <div class="home-hero__actions">
+      <div class="home-hero__actions" data-download-actions>
         <StoreActions variant="hero" />
       </div>
+      <UserCount />
     </div>
 
-    <div class="hero-stage">
-      <div class="hero-stage__screens" aria-label="Better Keep rich-text, notes home, and voice-note screens">
-        <div class="hero-stage__backdrop" aria-hidden="true"></div>
+    <div class="hero-video" data-hero-stage>
+      <picture>
         {
-          heroScreenshots.map((screenshot, index) => (
-            <DeviceFrame
-              {...screenshot}
-              priority={positions[index] === 'primary'}
-              class={`hero-device hero-device--${positions[index]}`}
-            />
-          ))
+          posters.flatMap(({ layout, ...poster }) =>
+            (['avif', 'webp'] as const).map((format) => (
+              <source {...poster} srcset={posterSrcset(layout, format)} type={`image/${format}`} />
+            ))
+          )
         }
+        <img
+          src="/media/video/hero-wide-1280.webp"
+          width="1280"
+          height="720"
+          fetchpriority="high"
+          decoding="async"
+          alt="Better Keep on a phone, showing a day plan with times and activities in a table"
+        />
+      </picture>
+      <video
+        data-hero-video
+        muted
+        loop
+        playsinline
+        preload="none"
+        disablepictureinpicture
+        tabindex="-1"
+        aria-label="Better Keep overview"
+        aria-describedby="hero-video-description"
+      >
+        <track kind="captions" srclang="en" label="English" src="/media/video/hero.en.vtt" />
+      </video>
+      <p class="sr-only" id="hero-video-description">
+        A phone shows a note being titled, colored, and highlighted, then a table,
+        a checklist, a sketch, search results, a PIN-locked note, an imported note,
+        and a choice of sync providers. The same table then appears on iOS, a
+        computer, and Android. The narration invites you to write, plan, sketch,
+        find, and lock your notes, then pick up on any device.
+      </p>
+      <div class="hero-video__controls" data-hero-video-controls hidden>
+        <button class="hero-video__toggle" type="button" data-hero-video-toggle aria-label="Play video">
+          <Icon name="Play" size={18} class="hero-video__play" />
+          <Icon name="Pause" size={18} class="hero-video__pause" />
+        </button>
+        <button class="hero-video__mute" type="button" data-hero-video-mute aria-label="Unmute video">
+          <Icon name="VolumeX" size={18} class="hero-video__muted" />
+          <Icon name="Volume2" size={18} class="hero-video__audible" />
+        </button>
+        <button class="hero-video__captions" type="button" data-hero-video-captions aria-label="Captions" aria-pressed="false">
+          <Icon name="Captions" size={18} />
+        </button>
       </div>
     </div>
-    <div class="home-hero__community"><UserCount /></div>
   </div>
 </section>
+
+<script>
+  import { initializeHeroVideo } from '../lib/hero-video.ts';
+  import {
+    allowsHeroAutoplay,
+    chooseHeroRendition,
+    heroVideoCatalog,
+    heroVideoPath,
+    pickHeroCodec,
+    settleWithin,
+    type HeroNetwork
+  } from '../lib/hero-video-source.ts';
+
+  const start = () => {
+    const stage = document.querySelector<HTMLElement>('[data-hero-stage]');
+    if (!stage) return;
+
+    const { connection: network } = navigator as Navigator & { connection?: HeroNetwork };
+    const narrow = window.matchMedia('(max-width: 680px)');
+    const layoutFor = (isNarrow: boolean) => (isNarrow ? 'tall' : 'wide');
+    const request = {
+      network,
+      pixelRatio: window.devicePixelRatio,
+      cssWidth: stage.clientWidth
+    };
+    const { renditions } = heroVideoCatalog[layoutFor(narrow.matches)];
+    const likely = chooseHeroRendition({
+      ...request,
+      layout: layoutFor(narrow.matches),
+      codec: 'av1',
+      ceiling: renditions.length - 1
+    });
+    // Let the poster, fonts, and styles finish before fetching the video, without
+    // depending on third-party scripts that can hold the load event back.
+    const pageLoaded =
+      document.readyState === 'complete'
+        ? Promise.resolve()
+        : new Promise<void>((resolve) =>
+            window.addEventListener('load', () => resolve(), { once: true })
+          );
+    const codec = pickHeroCodec(renditions[likely], navigator.mediaCapabilities);
+
+    initializeHeroVideo(stage, {
+      narrow,
+      page: document,
+      Observer: window.IntersectionObserver,
+      autoplay: allowsHeroAutoplay(
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        network
+      ),
+      codec: settleWithin(pageLoaded, 1500).then(() => codec),
+      reveal: () => {
+        const { top, bottom, height } = stage.getBoundingClientRect();
+        const header = document.querySelector('[data-site-header]')?.clientHeight ?? 0;
+        const visibleHeight = window.visualViewport?.height ?? window.innerHeight;
+        if (top >= header && bottom <= visibleHeight) return;
+        // Center it below the fixed header; if it is too tall, keep the captions.
+        const centered = header + (visibleHeight - header - height) / 2;
+        window.scrollBy({ top: top - Math.min(centered, visibleHeight - height) });
+      },
+      select: ({ narrow: isNarrow, codec, ceiling }) => {
+        const layout = layoutFor(isNarrow);
+        const index = chooseHeroRendition({
+          ...request,
+          cssWidth: stage.clientWidth,
+          layout,
+          codec,
+          ceiling
+        });
+        const rendition = heroVideoCatalog[layout].renditions[index];
+        return { src: heroVideoPath(layout, rendition, codec), index };
+      }
+    });
+  };
+
+  start();
+</script>

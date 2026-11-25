@@ -6,6 +6,36 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'a disconnected browser pauses verification and resumes once online',
+    (tester) async {
+      final oldCheck = Completer<CloudSessionState>();
+      var checks = 0, resumes = 0;
+      final recovery = CloudSessionRecovery(
+        verify: (_) async =>
+            ++checks == 1 ? await oldCheck.future : CloudSessionState.ready,
+        onReady: (_) async {
+          resumes++;
+        },
+        onFailure: (_, _) {},
+      )..start('qa');
+      final pending = recovery.check();
+      recovery.setNetworkAvailable(false);
+      oldCheck.complete(CloudSessionState.ready);
+      await pending;
+      await tester.pump(const Duration(minutes: 2));
+      expect(await recovery.check(), CloudSessionState.unavailable);
+      expect(checks, 1);
+      expect(resumes, 0);
+      recovery.setNetworkAvailable(true);
+      await tester.pump();
+      expect(recovery.state.value, CloudSessionState.ready);
+      expect(checks, 2);
+      expect(resumes, 1);
+      recovery.stop();
+    },
+  );
+
   test('session start notifies after the new session is installed', () {
     final recovery = CloudSessionRecovery(
       verify: (_) async => CloudSessionState.ready,

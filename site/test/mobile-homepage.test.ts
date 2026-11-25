@@ -10,8 +10,8 @@ const hero = await readFile(
   path.join(siteRoot, 'src/components/HomeHero.astro'),
   'utf8'
 );
-const gallery = await readFile(
-  path.join(siteRoot, 'src/components/ScreenshotRail.astro'),
+const download = await readFile(
+  path.join(siteRoot, 'src/components/DownloadSection.astro'),
   'utf8'
 );
 
@@ -32,40 +32,25 @@ function blockAfter(source: string, marker: string) {
 const mobile = blockAfter(css, '@media (max-width: 680px)');
 const narrow = blockAfter(css, '@media (max-width: 359px)');
 
-test('mobile hero uses one bounded phone in front of a true circular halo', () => {
-  const backdrop = blockAfter(mobile, '.hero-stage__backdrop');
-  const primary = blockAfter(mobile, '.hero-device--primary');
-  const sideDevices = blockAfter(
-    mobile,
-    '.hero-device--left,\n  .hero-device--right'
-  );
+test('mobile hero puts the download actions before one tall video', () => {
+  const video = blockAfter(mobile, '.hero-video');
 
-  assert.match(backdrop, /aspect-ratio:\s*1\s*;/);
-  assert.match(backdrop, /width:\s*min\(84vw, 340px\)/);
-  assert.match(backdrop, /height:\s*auto/);
-  assert.match(backdrop, /transform:\s*translateX\(-50%\)/);
-  assert.doesNotMatch(backdrop, /inset:\s*10% 4% 4%/);
-  assert.match(primary, /width:\s*clamp\(210px, 64vw, 250px\)/);
-  assert.match(sideDevices, /display:\s*none/);
-  assert.equal((hero.match(/heroScreenshots\.map/g) || []).length, 1);
-  assert.equal((hero.match(/<DeviceFrame/g) || []).length, 1);
+  assert.match(video, /width:\s*min\(82vw, 340px\)/);
+  assert.match(video, /aspect-ratio:\s*9 \/ 16/);
+  assert.equal((hero.match(/<video/g) || []).length, 1);
+  assert.ok(hero.indexOf('<StoreActions') < hero.indexOf('<UserCount'));
+  assert.ok(hero.indexOf('<UserCount') < hero.indexOf('<video'));
+  assert.match(hero, /layout: 'tall', media: narrow/);
 });
 
-test('mobile screenshot gallery is a native accessible scroll-snap rail', () => {
-  const galleryRule = blockAfter(mobile, '.device-gallery');
-  const galleryItemRule = blockAfter(mobile, '.device-gallery__item');
-
-  assert.match(galleryRule, /grid-auto-flow:\s*column/);
-  assert.match(galleryRule, /overflow-x:\s*auto/);
-  assert.match(galleryRule, /scroll-snap-type:\s*x mandatory/);
-  assert.match(galleryItemRule, /scroll-snap-align:\s*start/);
-  assert.match(galleryItemRule, /scroll-snap-stop:\s*always/);
-  assert.match(gallery, /Swipe to explore the app screens/);
-  assert.match(gallery, /role="region"/);
-  assert.match(gallery, /tabindex="0"/);
-  assert.equal((gallery.match(/galleryScreenshots\.map/g) || []).length, 1);
-  assert.match(gallery, /data-carousel-controls hidden/);
-  assert.match(gallery, /data-carousel-toggle/);
+test('the floating action yields to the page download actions', () => {
+  assert.match(hero, /data-download-actions/);
+  assert.match(download, /data-download-actions/);
+  const rule = blockAfter(
+    css,
+    "body:has([data-download-actions]) .floating-web-app:not([data-hidden='false'])"
+  );
+  assert.match(rule, /visibility:\s*hidden/);
 });
 
 test('homepage density and tap targets remain responsive at narrow widths', () => {
@@ -81,7 +66,11 @@ test('homepage density and tap targets remain responsive at narrow widths', () =
   assert.match(menuToggle, /height:\s*46px/);
   assert.match(storeBadge, /height:\s*52px/);
   assert.match(mobile, /\.home-section\s*\{[\s\S]*?padding-block:\s*4rem/);
-  assert.match(mobile, /\.security-story__device\s*\{[\s\S]*?min\(66vw, 240px\)/);
+  assert.match(blockAfter(css, '.hero-video__controls button'), /height:\s*44px/);
+  assert.match(
+    blockAfter(blockAfter(css, '@media (max-width: 920px)'), '.security-story__device'),
+    /display:\s*none/
+  );
 });
 
 test('mobile store actions use container-aware centering', () => {

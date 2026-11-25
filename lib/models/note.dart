@@ -1,4 +1,6 @@
 import 'package:better_keep/services/storage_health_service.dart';
+import 'package:better_keep/services/external_sync/sync_mutation_journal.dart';
+import 'package:better_keep/services/external_sync/sync_version.dart';
 import 'package:better_keep/models/note_table.dart';
 import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
@@ -58,7 +60,12 @@ Reminder? _parseReminder(Object? raw) {
 
 enum _AttachmentSerializationPolicy { standard, lockedPinBoundary }
 
-enum RemoteNoteCommitResult { applied, localChanged, staleSession }
+enum RemoteNoteCommitResult {
+  applied,
+  identityConflict,
+  localChanged,
+  staleSession,
+}
 
 class NoteColor {
   final Color value;
@@ -171,8 +178,32 @@ extension NoteEventData on NoteEvent {
 enum NoteType { all, archived, trashed, pinned, locked, reminder }
 
 class Note extends BaseModel<Note> {
-  static final ModelSchema<Note> _schema = _createSchema();
+  static int _lastAllocatedId = 0;
+
+  /// Allocates an opaque local ID, not a creation timestamp. Call within the
+  /// insertion/reservation transaction; any supplied maximum must come from it.
+  static Future<int> allocateLocalId(
+    Transaction transaction, {
+    int? highestStoredId,
+  }) async {
+    final highest =
+        highestStoredId ??
+        Sqflite.firstIntValue(
+          await transaction.rawQuery('SELECT MAX(id) FROM note'),
+        ) ??
+        0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final floor = highest > _lastAllocatedId ? highest : _lastAllocatedId;
+    // Reserve IDs while a new note stages its protected files outside SQLite.
+    _lastAllocatedId = floor >= now ? floor + 1 : now;
+    return _lastAllocatedId;
+  }
+
+  static final _NoteSchema _schema = _createSchema();
   static const model = "note";
+
+  static Future<bool> libraryIsEmpty(Database db) async =>
+      (await db.rawQuery('SELECT 1 FROM $model LIMIT 1')).isEmpty;
   static const decryptionFailedContent = '{"decryption_failed": true}';
 
   @visibleForTesting
@@ -251,6 +282,8 @@ class Note extends BaseModel<Note> {
   List<NoteAttachment> attachments;
 
   final _mutationQueue = _AsyncMutationQueue();
+
+  bool _metadataOnly = false;
 
   bool _unlocked = false;
 
@@ -427,6 +460,34 @@ class Note extends BaseModel<Note> {
       null,
       matchAllLabels,
     ]);
+  }
+
+  /// Metadata-only notes reject persistence. Await mutations to handle the
+  /// resulting StateError. Scheduling re-reads the full note under its per-note
+  /// lock; notification planning needs display content.
+  /// Row order is unspecified; the notification planner sorts by due time/id.
+  static Future<List<Note>> getForReminderReconciliation({
+    bool includeNotificationContent = false,
+  }) async {
+    final rows = await AppState.db.query(
+      model,
+      columns: includeNotificationContent
+          ? null
+          : const ['id', 'reminder', 'completed', 'trashed'],
+      where: includeNotificationContent
+          ? 'trashed = 0 AND archived = 0 AND completed = 0 AND reminder IS NOT NULL'
+          : 'trashed = 0 AND archived = 0',
+    );
+    if (!includeNotificationContent) {
+      return rows
+          .map((row) => Note.fromJson(row).._metadataOnly = true)
+          .toList();
+    }
+    final notificationRows = rows.where(
+      (row) =>
+          _parseReminder(row['reminder'])?.type == ReminderType.notification,
+    );
+    return _schema.decodeRows(notificationRows.toList());
   }
 
   static Future<int> count(
@@ -654,7 +715,7 @@ class Note extends BaseModel<Note> {
   }) : _locked = locked,
        attachments = attachments ?? [];
 
-  factory Note.fromJson(Map<String, dynamic> obj) {
+  factory Note.fromJson(Map<String, dynamic> obj, {bool strict = false}) {
     final locked = (obj['locked'] == 1 || obj['locked'] == true) ? true : false;
 
     int colorValue =
@@ -677,16 +738,24 @@ class Note extends BaseModel<Note> {
         } else {
           try {
             parsedAttachments = (json.decode(attachmentsData) as List)
-                .map((e) => NoteAttachment.fromJson(e))
+                .map((e) => NoteAttachment.fromJson(e, strict: strict))
                 .toList();
           } catch (e) {
+            if (strict) rethrow;
             AppLogger.error('Error parsing attachments in fromJson', e);
           }
         }
       } else if (attachmentsData is List) {
         parsedAttachments = attachmentsData
-            .map((e) => NoteAttachment.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => NoteAttachment.fromJson(
+                e as Map<String, dynamic>,
+                strict: strict,
+              ),
+            )
             .toList();
+      } else if (strict) {
+        throw const FormatException('Invalid note attachments');
       }
     }
 
@@ -738,6 +807,9 @@ class Note extends BaseModel<Note> {
 
   void _assignRemoteJson(Map<String, dynamic> obj) {
     syncId = obj['sync_id'] as String? ?? syncId;
+    if (obj['created_at'] is String) {
+      createdAt = DateTime.parse(obj['created_at'] as String);
+    }
     pinned = obj['pinned'] == 1;
     _locked = obj['locked'] == 1;
     trashed = obj['trashed'] == 1;
@@ -795,15 +867,48 @@ class Note extends BaseModel<Note> {
     return this;
   }
 
-  /// Preparation is detached from the stored row. Local edits and their queue
-  /// marker win even when they commit while remote files are being prepared.
+  /// A numeric local ID is only a placement hint, never proof of ownership.
+  /// Legacy rows without a sync ID need an established matching sync track.
+  static bool matchesRemoteIdentity(
+    String remoteId,
+    Map<String, Object?>? row,
+    Map<String, Object?>? track,
+  ) {
+    final noteIdentity = row?['sync_id'];
+    final trackedIdentity = track?['remote_id'];
+    if (trackedIdentity != null && trackedIdentity != remoteId) return false;
+    if (row == null) return true;
+    if (noteIdentity == null || noteIdentity == '') {
+      return trackedIdentity == remoteId;
+    }
+    return noteIdentity == remoteId;
+  }
+
+  /// Preparation is detached from the stored row. A local write during file
+  /// preparation invalidates the snapshot; a retry compares logical versions.
   Future<RemoteNoteCommitResult> applyRemoteIfUnchanged({
     required Database database,
     required Map<String, Object?>? expectedRow,
     required Map<String, Object?>? expectedSyncRow,
     required Map<String, dynamic> incoming,
     required Future<bool> Function(Transaction) commitAttachments,
+    required SyncVersion incomingVersion,
   }) async {
+    _requireCompleteNote();
+    if (incomingVersion.kind != SyncEntityKind.note ||
+        incomingVersion.deleted ||
+        incomingVersion.entityId != incoming['sync_id']) {
+      throw const FormatException(
+        'Incoming note does not match its sync version',
+      );
+    }
+    if (!matchesRemoteIdentity(
+      incomingVersion.entityId,
+      expectedRow,
+      expectedSyncRow,
+    )) {
+      return RemoteNoteCommitResult.identityConflict;
+    }
     _assignRemoteJson(incoming);
     await _migrateSketchesToStrokesFiles();
     final row = await toJsonAsync();
@@ -819,22 +924,36 @@ class Note extends BaseModel<Note> {
       );
       final currentRow = notes.isEmpty ? null : notes.single;
       final currentTrack = tracks.isEmpty ? null : tracks.single;
+      if (!matchesRemoteIdentity(
+        incomingVersion.entityId,
+        currentRow,
+        currentTrack,
+      )) {
+        return RemoteNoteCommitResult.identityConflict;
+      }
+      final currentVersion = await SyncMutationJournal.current(
+        txn,
+        SyncEntityKind.note,
+        incomingVersion.entityId,
+      );
       if (!mapEquals(currentRow, expectedRow) ||
           !mapEquals(currentTrack, expectedSyncRow) ||
-          currentTrack?['status'] == SyncStatus.pending.name ||
-          currentTrack?['status'] == SyncStatus.failed.name ||
-          currentTrack?['action'] == SyncAction.delete.name) {
+          (currentVersion != null &&
+              incomingVersion.compareTo(currentVersion) < 0)) {
         return RemoteNoteCommitResult.localChanged;
       }
       requireCloudOperation();
       if (!await commitAttachments(txn)) {
         return RemoteNoteCommitResult.localChanged;
       }
-      if (currentRow == null) {
-        await txn.insert(model, row);
-      } else {
-        await txn.update(model, row, where: 'id = ?', whereArgs: [id]);
-      }
+      await SyncMutationJournal.withoutCapture(txn, () async {
+        if (currentRow == null) {
+          await txn.insert(model, row);
+        } else {
+          await txn.update(model, row, where: 'id = ?', whereArgs: [id]);
+        }
+        await SyncMutationJournal.received(txn, incomingVersion, id.toString());
+      });
       final syncRow = {
         ...?currentTrack,
         'local_id': id,
@@ -863,18 +982,27 @@ class Note extends BaseModel<Note> {
     return result;
   }
 
-  static Future<Note> fromJsonAsync(Map<String, dynamic> obj) async {
-    final note = Note.fromJson(obj);
-    await note.decryptFields();
+  /// Recovery must not offer an editable model after silently dropping data.
+  /// Strict reads fail without modifying the durable source row.
+  static Future<Note> fromJsonAsync(
+    Map<String, dynamic> obj, {
+    bool strict = false,
+  }) async {
+    final note = Note.fromJson(obj, strict: strict);
+    await note.decryptFields(strict: strict);
     return note;
   }
 
-  Future<void> decryptFields() async {
+  Future<void> decryptFields({bool strict = false}) async {
     final localEncryption = LocalDataEncryption.instance;
 
     // Decrypt content
     if (content != null && content!.isNotEmpty) {
+      final encrypted = LocalDataEncryption.isEncrypted(content!);
       content = await localEncryption.decryptString(content!);
+      if (strict && encrypted && content!.isEmpty) {
+        throw const FormatException('Note content could not be decoded');
+      }
     }
 
     if (_rawEncryptedAttachments != null) {
@@ -884,10 +1012,16 @@ class Note extends BaseModel<Note> {
         );
         final List attachmentList = json.decode(decryptedStr);
         attachments = attachmentList
-            .map((a) => NoteAttachment.fromJson(a as Map<String, dynamic>))
+            .map(
+              (a) => NoteAttachment.fromJson(
+                a as Map<String, dynamic>,
+                strict: strict,
+              ),
+            )
             .toList();
         _rawEncryptedAttachments = null;
       } catch (e) {
+        if (strict) rethrow;
         AppLogger.error('Error decrypting attachments', e);
       }
     }
@@ -920,9 +1054,71 @@ class Note extends BaseModel<Note> {
           attachment.sketch!.encryptedMetadata = null;
           attachment.sketch!.markStrokesHydrated();
         } catch (e) {
+          if (strict) rethrow;
           AppLogger.error('Error decrypting sketch metadata', e);
         }
       }
+    }
+    if (strict) validateReadableContent();
+  }
+
+  /// Checks recovery content without rewriting legacy Delta data. PIN ciphertext
+  /// stays opaque until authenticated, including notes that remain PIN-protected
+  /// while their current in-memory body is unlocked.
+  void validateReadableContent() {
+    if ((_locked && !_unlocked) || content == null || content!.isEmpty) return;
+    try {
+      final operations = json.decode(content!);
+      if (operations is! List) throw const FormatException();
+      // Cells are Delta documents too. Visit populated cells iteratively so
+      // legacy nested tables receive the same validation as the outer note.
+      final pending = <List<dynamic>>[operations];
+      while (pending.isNotEmpty) {
+        final delta = pending.removeLast();
+        for (final operation in delta) {
+          if (operation is! Map<String, dynamic> ||
+              (operation['insert'] is! String && operation['insert'] is! Map) ||
+              operation.containsKey('retain') ||
+              operation.containsKey('delete') ||
+              (operation['attributes'] != null &&
+                  operation['attributes'] is! Map<String, dynamic>)) {
+            throw const FormatException();
+          }
+          // Quill checks cardinality only with an assert and does not invoke
+          // the app's embed builders while parsing a document.
+          if (operation['insert'] case final Map embed) {
+            if (embed.length != 1) throw const FormatException();
+            final payload = embed.values.single;
+            switch (embed.keys.single) {
+              case NoteTableData.type:
+                final table = NoteTableData.fromJson(payload);
+                for (final key in table.cells.keys) {
+                  final coordinates = key.split(':');
+                  if (coordinates.length != 2 ||
+                      coordinates.any((value) => int.tryParse(value) == null)) {
+                    throw const FormatException();
+                  }
+                }
+                pending.addAll(table.cells.values);
+              case 'note-attachment':
+                if (payload is! Map<String, dynamic> ||
+                    payload['id'] is! String ||
+                    payload['src'] is! String) {
+                  throw const FormatException();
+                }
+              case BlockEmbed.imageType:
+              case BlockEmbed.videoType:
+                if (payload is! String) throw const FormatException();
+              default:
+                // The editor has no builder for an unknown embed type.
+                throw const FormatException();
+            }
+          }
+        }
+        documentFromJsonSafe(delta).close();
+      }
+    } catch (_) {
+      throw const FormatException('Note content could not be decoded');
     }
   }
 
@@ -1024,12 +1220,13 @@ class Note extends BaseModel<Note> {
       );
     }
 
-    final noteId = originalId ?? DateTime.now().millisecondsSinceEpoch;
     final transactionService = NoteLockTransactionService(operations);
     NoteLockJournalRecord? activeRecord;
     var databaseCommitted = false;
 
     try {
+      final noteId =
+          originalId ?? await AppState.db.transaction<int>(allocateLocalId);
       final encryptedContent = await encrypt(authenticatedContent, password);
       final workingAttachments = _deepCopyAttachments(attachments);
 
@@ -1999,7 +2196,13 @@ class Note extends BaseModel<Note> {
   /// so repair flows can persist it with an attachment-only guarded update.
   Future<bool> generateMissingAttachmentThumbnails({
     Future<Uint8List> Function(String path)? readBytes,
-  }) => _generateMissingAttachmentThumbnails(attachments, readBytes: readBytes);
+  }) async {
+    _requireCompleteNote();
+    return _generateMissingAttachmentThumbnails(
+      attachments,
+      readBytes: readBytes,
+    );
+  }
 
   static Future<bool> _generateMissingAttachmentThumbnails(
     List<NoteAttachment> targetAttachments, {
@@ -2635,6 +2838,7 @@ class Note extends BaseModel<Note> {
     String filePath,
     Uint8List plaintext,
   ) async {
+    _requireCompleteNote();
     if (filePath.isEmpty || filePath.startsWith('http')) {
       throw const NoteRelockException(
         'A local attachment path is required for saving',
@@ -2716,7 +2920,20 @@ class Note extends BaseModel<Note> {
     await ReminderCoordinator.instance.schedule(this);
   }
 
+  void _requireCompleteNote() {
+    if (_metadataOnly) {
+      throw StateError(
+        'Cannot persist a metadata-only note; reload the complete note',
+      );
+    }
+  }
+
   Future<T> _enqueueMutation<T>(Future<T> Function() action) {
+    try {
+      _requireCompleteNote();
+    } catch (error, stackTrace) {
+      return Future<T>.error(error, stackTrace);
+    }
     final database = AppState.get('db') as Database?;
     final repairs = database == null
         ? null
@@ -2764,7 +2981,7 @@ class Note extends BaseModel<Note> {
   }) => AppState.db.transaction((transaction) async {
     requireCloudOperation();
     final result = await write(transaction);
-    if (trackSync && id != null) {
+    if (trackSync && id != null && result > 0) {
       await SyncTrackStore.queueInTransaction(
         transaction: transaction,
         table: NoteSyncTrack.model,
@@ -2796,15 +3013,15 @@ class Note extends BaseModel<Note> {
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   ]) async {
-    final exists =
-        id != null &&
-        (await AppState.db.query(
-          model,
-          columns: ['id'],
-          where: 'id = ?',
-          whereArgs: [id],
-          limit: 1,
-        )).isNotEmpty;
+    final existingRows = id == null
+        ? const <Map<String, Object?>>[]
+        : await AppState.db.query(
+            model,
+            where: 'id = ?',
+            whereArgs: [id],
+            limit: 1,
+          );
+    final exists = existingRows.isNotEmpty;
     requireCloudOperation();
     // Empty cloud notes are valid saved records; only discard unsaved drafts.
     if (isEmpty && !exists) return -1;
@@ -2846,17 +3063,39 @@ class Note extends BaseModel<Note> {
     if (id != null) {
       if (exists) {
         try {
-          await _persistLocalChange(
-            (transaction) => transaction.update(
-              model,
-              jsonObj,
-              where: 'id = ?',
-              whereArgs: [id],
-            ),
+          // Decrypt/compare outside the transaction; recheck the exact source
+          // row inside it before suppressing a write.
+          final unchanged =
+              trackSync && await _sameStoredNote(existingRows.single, jsonObj);
+          final written = await _persistLocalChange(
+            (transaction) async {
+              if (unchanged) {
+                final rows = await transaction.query(
+                  model,
+                  where: 'id = ?',
+                  whereArgs: [id],
+                );
+                if (rows.isNotEmpty &&
+                    mapEquals(rows.single, existingRows.single)) {
+                  updatedAt = DateTime.tryParse(
+                    rows.single['updated_at']?.toString() ?? '',
+                  );
+                  return 0;
+                }
+              }
+              return transaction.update(
+                model,
+                jsonObj,
+                where: 'id = ?',
+                whereArgs: [id],
+              );
+            },
             trackSync: trackSync,
             action: SyncAction.upload,
           );
-          _notifyPersistedChange('updated', trackSync, origin);
+          if (written > 0) {
+            _notifyPersistedChange('updated', trackSync, origin);
+          }
           return id!;
         } catch (e) {
           if (!cloudOperationIsCurrent()) rethrow;
@@ -2868,11 +3107,8 @@ class Note extends BaseModel<Note> {
         }
       }
       // If not exists, fall through to insert with the existing ID
-    } else {
-      id = DateTime.now().millisecondsSinceEpoch;
     }
 
-    jsonObj['id'] = id;
     jsonObj['sync_id'] = syncId;
     if (jsonObj['created_at'] == null) {
       jsonObj['created_at'] = DateTime.now().toIso8601String();
@@ -2880,7 +3116,11 @@ class Note extends BaseModel<Note> {
 
     try {
       await _persistLocalChange(
-        (transaction) => transaction.insert(model, jsonObj),
+        (transaction) async {
+          id ??= await allocateLocalId(transaction);
+          jsonObj['id'] = id;
+          return transaction.insert(model, jsonObj);
+        },
         trackSync: trackSync,
         action: SyncAction.upload,
       );
@@ -2895,6 +3135,69 @@ class Note extends BaseModel<Note> {
       AppLogger.log("Error saving note: $e");
       id = null;
       return -1;
+    }
+  }
+
+  // Compare the persisted snapshot, not an earlier in-memory baseline: reverting
+  // a real edit must still create a revision. Random encryption nonces are not
+  // edits. The caller rechecks the source row in its write transaction.
+  Future<bool> _sameStoredNote(
+    Map<String, Object?> stored,
+    Map<String, dynamic> proposed,
+  ) async {
+    Future<String> localPlaintext(String value) async {
+      final plain = await LocalDataEncryption.instance.decryptString(value);
+      if (LocalDataEncryption.isEncrypted(value) &&
+          (plain.isEmpty || plain == value)) {
+        throw const FormatException('Cannot compare encrypted note content');
+      }
+      return plain;
+    }
+
+    Future<Object?> comparable(String field, Object? value) async {
+      if (field == 'content') {
+        final plain = await localPlaintext(value as String? ?? '');
+        return _locked && _unlocked && _password != null
+            ? await _decryptPinContent(plain, _password!)
+            : plain;
+      }
+      if (field == 'attachments') {
+        final attachments =
+            jsonDecode(await localPlaintext(value as String? ?? '[]')) as List;
+        for (final attachment in attachments) {
+          final data = attachment['data'];
+          if (data is Map && data['encrypted_metadata'] is String) {
+            data['encrypted_metadata'] = await localPlaintext(
+              data['encrypted_metadata'] as String,
+            );
+          }
+        }
+        return jsonEncode(attachments);
+      }
+      return value;
+    }
+
+    try {
+      for (final field in proposed.keys) {
+        if (field == 'updated_at' || field == 'plain_text') continue;
+        // Enabling local encryption must still replace the unprotected row.
+        if (field == 'content' &&
+            LocalDataEncryption.isEncrypted(stored[field] as String? ?? '') !=
+                LocalDataEncryption.isEncrypted(
+                  proposed[field] as String? ?? '',
+                )) {
+          return false;
+        }
+        if (await comparable(field, stored[field]) !=
+            await comparable(field, proposed[field])) {
+          return false;
+        }
+      }
+      return true;
+    } catch (_) {
+      // If comparison is unavailable, retain the normal save path. Never drop
+      // a potential edit merely because a fingerprint cannot be established.
+      return false;
     }
   }
 
@@ -2982,6 +3285,7 @@ class Note extends BaseModel<Note> {
     bool trackSync = true,
     ModelChangeOrigin origin = ModelChangeOrigin.local,
   }) async {
+    _requireCompleteNote();
     // If id is null, the note was never saved - nothing to delete
     if (id == null) {
       return 0;
@@ -3440,7 +3744,7 @@ bool _publishAttachments(
   return true;
 }
 
-ModelSchema<Note> _createSchema() {
+_NoteSchema _createSchema() {
   final schema = _NoteSchema();
   BaseModel.registerSchema<Note>(schema);
   return schema;
@@ -3490,7 +3794,20 @@ class _NoteSchema implements ModelSchema<Note> {
   @override
   Future<List<Note>> get(List<dynamic> args) async {
     final rows = await getOrCountRows(false, args);
-    final notes = await Future.wait(rows.map(Note.fromJsonAsync));
+    return await decodeRows(rows);
+  }
+
+  Future<List<Note>> decodeRows(List<Map<String, dynamic>> rows) async {
+    // Bound in-flight field decryption when reopening a restored library.
+    const batchSize = 16;
+    final notes = <Note>[];
+    for (var start = 0; start < rows.length; start += batchSize) {
+      notes.addAll(
+        await Future.wait(
+          rows.skip(start).take(batchSize).map(Note.fromJsonAsync),
+        ),
+      );
+    }
     return notes;
   }
 

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/components/adaptive_popup_menu.dart';
 import 'package:better_keep/components/page_pattern_painter.dart';
 import 'package:better_keep/components/sketch_painter.dart';
@@ -13,6 +14,7 @@ import 'package:better_keep/models/note_attachment.dart';
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/services/file_system.dart';
+import 'package:better_keep/services/new_attachment_transaction_service.dart';
 import 'package:better_keep/services/note_sync_service.dart';
 import 'package:better_keep/services/sketch_preview_repair_service.dart';
 import 'package:better_keep/services/sketch_renderer.dart';
@@ -239,6 +241,11 @@ class _SketchPageState extends State<SketchPage>
   double? _pendingDotPressure;
 
   bool _hasFitted = false;
+
+  /// Viewport and insets of the last layout, and the transform it was given.
+  Size _fittedViewport = Size.zero;
+  EdgeInsets _fittedPadding = EdgeInsets.zero;
+  Matrix4? _fittedTransform;
   SketchTool _selectedTool = SketchTool.pen;
 
   /// Whether move/pan mode is active (not a drawing tool)
@@ -691,6 +698,17 @@ class _SketchPageState extends State<SketchPage>
     }
 
     final createdPaths = <String>[];
+    // Persist cleanup intent before switching the pointer. Never delete during
+    // an active session: uploads and editors may still be reading the old file.
+    final retiredSource = state.sketchData.strokesFilePath;
+    if (!kIsWeb && retiredSource != null && retiredSource.isNotEmpty) {
+      await PendingAttachmentSourceCleanupJournal(await AppState.prefs).put(
+        PendingAttachmentSourceCleanupRecord(
+          cleanupId: retiredSource,
+          sourcePath: retiredSource,
+        ),
+      );
+    }
     try {
       await state.note.persistSketchMutation(() async {
         _throwIfStale(state);
@@ -736,20 +754,15 @@ class _SketchPageState extends State<SketchPage>
         );
         _throwIfStale(state);
 
-        // Reuse existing strokes file path or create new one (only if valid local path)
-        final existingStrokesPath = state.sketchData.strokesFilePath;
-        String strokesFilePath;
-        if (existingStrokesPath != null &&
-            existingStrokesPath.isNotEmpty &&
-            !existingStrokesPath.startsWith('http')) {
-          strokesFilePath = existingStrokesPath;
-        } else {
-          strokesFilePath = path.join(
-            await fs.documentDir,
-            '${Uuid().v4()}.json',
-          );
-          createdPaths.add(strokesFilePath);
-        }
+        // A saved source belongs to its note revision. Replacing its bytes can
+        // change an in-flight sync snapshot and can look like an unchanged note
+        // when the small preview is identical. Publish a new path only after
+        // the new source is complete; retain the previous revision's file.
+        final strokesFilePath = path.join(
+          await fs.documentDir,
+          '${Uuid().v4()}.json',
+        );
+        createdPaths.add(strokesFilePath);
         final preparedSketch = SketchData(
           strokes: List<SketchStroke>.from(state.strokes),
           aspectRatio: bodySize.width / bodySize.height,
@@ -1106,7 +1119,12 @@ class _SketchPageState extends State<SketchPage>
             Positioned.fill(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  if (!_hasFitted) {
+                  if (isIPhoneDuo) {
+                    _updateViewport(
+                      constraints.biggest,
+                      MediaQuery.paddingOf(context),
+                    );
+                  } else if (!_hasFitted) {
                     _hasFitted = true;
                     _fitToScreen(constraints.maxWidth, constraints.maxHeight);
                   }
@@ -2154,6 +2172,50 @@ class _SketchPageState extends State<SketchPage>
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
       ..setEntry(2, 2, scale);
+  }
+
+  /// Fits a new canvas, and keeps it in place when the window resizes: an
+  /// untouched canvas is refitted, while a canvas the user zoomed or panned
+  /// keeps its scale and the point at the centre of the visible area.
+  void _updateViewport(Size viewport, EdgeInsets padding) {
+    if (!_hasFitted) {
+      _hasFitted = true;
+      _fitToArea(viewport, padding);
+    } else if (viewport != _fittedViewport || padding != _fittedPadding) {
+      final current = _transformationController.value;
+      if (current == _fittedTransform) {
+        _fitToArea(viewport, padding);
+      } else {
+        final delta =
+            padding.deflateRect(Offset.zero & viewport).center -
+            _fittedPadding.deflateRect(Offset.zero & _fittedViewport).center;
+        _transformationController.value = current.clone()
+          ..setEntry(0, 3, current.entry(0, 3) + delta.dx)
+          ..setEntry(1, 3, current.entry(1, 3) + delta.dy);
+      }
+    }
+    _fittedViewport = viewport;
+    _fittedPadding = padding;
+  }
+
+  void _fitToArea(Size viewport, EdgeInsets padding) {
+    // Side insets matter too: a foldable keeps its status area on one side.
+    final area = padding.deflateRect(Offset.zero & viewport);
+    final double scale =
+        min(area.width / _canvasSize.width, area.height / _canvasSize.height) *
+        0.95;
+    final origin =
+        area.center -
+        Offset(_canvasSize.width, _canvasSize.height) * (scale / 2);
+
+    final transform = Matrix4.identity()
+      ..setEntry(0, 3, origin.dx)
+      ..setEntry(1, 3, origin.dy)
+      ..setEntry(0, 0, scale)
+      ..setEntry(1, 1, scale)
+      ..setEntry(2, 2, scale);
+    _fittedTransform = transform.clone();
+    _transformationController.value = transform;
   }
 
   void _startStroke(double x, double y, double? pressure) {

@@ -1,10 +1,10 @@
 import 'package:better_keep/dialogs/snackbar.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
-import 'package:better_keep/utils/utils.dart';
 import 'package:path/path.dart' as path;
 import 'package:better_keep/config.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_attachment_embed.dart';
 import 'package:better_keep/models/note_recording.dart';
 import 'package:flutter/material.dart';
@@ -68,6 +68,7 @@ class _AttachButtonState extends State<AttachButton> {
 
   @override
   Widget build(BuildContext context) {
+    final hasPageBeside = NotePaneHost.hasPageBeside(context);
     return AdaptivePopupMenu(
       controller: _controller,
       parentColor: widget.parentColor,
@@ -100,11 +101,13 @@ class _AttachButtonState extends State<AttachButton> {
             label: context.l10n.audio,
             onTap: _handleAudio,
           ),
-        AdaptiveMenuItem(
-          icon: Icons.draw,
-          label: context.l10n.sketch,
-          onTap: _handleSketch,
-        ),
+        // The sketch beside the note has its own list of sketches.
+        if (!hasPageBeside)
+          AdaptiveMenuItem(
+            icon: Icons.draw,
+            label: context.l10n.sketch,
+            onTap: _handleSketch,
+          ),
       ],
       child: IconButton(
         padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 2, 8),
@@ -332,7 +335,7 @@ class _AttachButtonState extends State<AttachButton> {
 
     final previous = widget.note.attachments.toSet();
 
-    await showPage(
+    await openBesideNote(
       context,
       SketchPage(
         note: widget.note,
@@ -340,7 +343,7 @@ class _AttachButtonState extends State<AttachButton> {
           backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         ),
       ),
-      allowFullScreen: true,
+      noteStaysEditable: true,
     );
     // Scroll to attachment after returning from sketch page if sketch was added
     widget.onAttachmentAdded?.call();

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import screenshotCatalog from '../src/data/screenshots.json' with { type: 'json' };
+import heroVideo from '../src/data/hero-video.json' with { type: 'json' };
 import { screenshotPreviewWidths } from '../src/lib/screenshot-previews.ts';
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -41,6 +42,26 @@ const assetCopies: readonly (readonly [string, string])[] = Object.freeze([
     'media/store-badges/microsoft-store.svg'
   ]
 ]);
+
+const heroLayouts = Object.entries(heroVideo);
+export const heroVideoFiles = Object.freeze(
+  heroLayouts.flatMap(([layout, { renditions }]) =>
+    renditions.flatMap(({ width, kbps }) =>
+      Object.keys(kbps).map((codec) => `hero-${layout}-${width}.${codec}.mp4`)
+    )
+  )
+);
+export const heroCaptionFile = 'hero.en.vtt';
+export const heroPosterSources = Object.freeze(
+  heroLayouts.map(([layout]) => `hero-${layout}-poster.png`)
+);
+export const heroPosterFiles = Object.freeze(
+  heroLayouts.flatMap(([layout, { posterWidths }]) =>
+    posterWidths.flatMap((width) =>
+      ['avif', 'webp'].map((format) => `hero-${layout}-${width}.${format}`)
+    )
+  )
+);
 
 async function copyAsset(projectRoot: string, outputRoot: string, [source, destination]: readonly [string, string]) {
   const sourcePath = path.isAbsolute(source)
@@ -89,6 +110,27 @@ function screenshotSource(projectRoot: string, id: string) {
   return path.join(projectRoot, 'site', 'assets', 'screenshots', `${id}.png`);
 }
 
+async function prepareHeroVideo(projectRoot: string, outputRoot: string) {
+  const sourceRoot = path.join(projectRoot, 'site', 'assets', 'video');
+  const destinationRoot = path.join(outputRoot, 'media', 'video');
+  await mkdir(destinationRoot, { recursive: true });
+  await Promise.all([
+    ...[...heroVideoFiles, heroCaptionFile].map((file) =>
+      copyFile(path.join(sourceRoot, file), path.join(destinationRoot, file))
+    ),
+    ...heroLayouts.flatMap(([layout, { posterWidths }]) =>
+      posterWidths.flatMap((width) => {
+        const poster = sharp(path.join(sourceRoot, `hero-${layout}-poster.png`)).resize({ width });
+        const destination = path.join(destinationRoot, `hero-${layout}-${width}`);
+        return [
+          poster.clone().avif({ quality: 52, effort: 5 }).toFile(`${destination}.avif`),
+          poster.clone().webp({ quality: 78, effort: 6 }).toFile(`${destination}.webp`)
+        ];
+      })
+    )
+  ]);
+}
+
 async function validateScreenshot(projectRoot: string, item: Screenshot) {
   const { id, width, height } = item;
   const metadata = await sharp(screenshotSource(projectRoot, id)).metadata();
@@ -126,6 +168,7 @@ export async function prepareSiteAssets({
   await Promise.all([
     ...assetCopies.map((copy) => copyAsset(projectRoot, outputRoot, copy)),
     prepareGooglePlayBadge(projectRoot, outputRoot),
+    prepareHeroVideo(projectRoot, outputRoot),
     ...screenshotCatalog.map((item) => prepareScreenshot(projectRoot, outputRoot, item))
   ]);
 }
@@ -133,6 +176,6 @@ export async function prepareSiteAssets({
 if (path.resolve(process.argv[1] || '') === scriptPath) {
   await prepareSiteAssets();
   console.log(
-    `Prepared ${screenshotIds.length} authentic screenshots and ${assetCopies.length + 1} brand assets.`
+    `Prepared ${screenshotIds.length} authentic screenshots and ${assetCopies.length + 1} brand and video assets.`
   );
 }

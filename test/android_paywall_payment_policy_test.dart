@@ -32,7 +32,7 @@ void main() {
       const MaterialApp(
         localizationsDelegates: betterKeepLocalizationDelegates,
         supportedLocales: betterKeepSupportedLocales,
-        home: Scaffold(body: PaywallSheet()),
+        home: PaywallPage(),
       ),
     );
     await tester.pump();
@@ -50,38 +50,33 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  for (final paywall in <String, Widget>{
-    'sheet': const PaywallSheet(),
-    'page': const PaywallPage(),
-  }.entries) {
-    testWidgets(
-      'Android ${paywall.key} loading transitions do not present purchase errors',
-      (tester) async {
-        tester.view.physicalSize = const Size(1080, 2400);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'Android paywall loading transitions do not present purchase errors',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            localizationsDelegates: betterKeepLocalizationDelegates,
-            supportedLocales: betterKeepSupportedLocales,
-            home: Scaffold(body: paywall.value),
-          ),
-        );
-        await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: betterKeepLocalizationDelegates,
+          supportedLocales: betterKeepSupportedLocales,
+          home: const PaywallPage(),
+        ),
+      );
+      await tester.pump();
 
-        SubscriptionService.instance.isLoading.value = true;
-        await tester.pump();
-        SubscriptionService.instance.isLoading.value = false;
-        await tester.pump();
+      SubscriptionService.instance.isLoading.value = true;
+      await tester.pump();
+      SubscriptionService.instance.isLoading.value = false;
+      await tester.pump();
 
-        expect(find.byType(PurchaseFeedbackListener), findsOneWidget);
-        expect(find.byType(SnackBar), findsNothing);
+      expect(find.byType(PurchaseFeedbackListener), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        debugDefaultTargetPlatformOverride = null;
-      },
-    );
-  }
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
 }

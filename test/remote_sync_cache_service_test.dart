@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:better_keep/models/cloud_sync_cursor.dart';
 import 'package:better_keep/models/pending_remote_sync.dart';
+import 'package:better_keep/services/cloud_operation.dart';
+import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/file_system.dart';
 import 'package:better_keep/services/remote_document_revision.dart';
 import 'package:better_keep/services/remote_sync_cache_service.dart';
@@ -43,7 +46,7 @@ void main() {
         final fs = _MemoryFileSystem();
         final original = RemoteSyncCacheService.forTesting(() async => fs);
         await original.init();
-        await original.startNewSync(_cursor);
+        await original.startNewSync(_cursor, ownerUid: 'account-a');
         await original.addPage(_page(hasMore: true));
         final before = fs.files.map(
           (key, value) => MapEntry(key, value.toList()),
@@ -54,9 +57,147 @@ void main() {
         expect(fs.files, before);
         fs.failReads = false;
         await restarted.init();
+        expect(restarted.metadata?.ownerUid, 'account-a');
         expect(restarted.getPendingSyncs().single.remoteDocId, 'note-1');
       },
     );
+
+    for (final evictPending in [false, true]) {
+      test(
+        'restart after one completed page (pending page evicted: $evictPending)',
+        () async {
+          final fs = _MemoryFileSystem();
+          final cache = RemoteSyncCacheService.forTesting(() async => fs);
+          await cache.startNewSync(null, ownerUid: 'account-a');
+          await cache.addPage(_page(hasMore: true));
+          await cache.addPage(
+            PendingRemoteSyncPage(
+              pageIndex: 1,
+              syncs: _page(hasMore: false, id: 'note-2').syncs,
+            ),
+            maxCursor: _cursor,
+          );
+          await cache.markAllPagesFetched();
+          await cache.markCompleted('note-1');
+          if (evictPending) {
+            expect(
+              await fs.delete('/cache/remote_sync_cache/page_1.json'),
+              isTrue,
+            );
+          }
+          final restarted = RemoteSyncCacheService.forTesting(() async => fs);
+          await restarted.init();
+          expect(
+            classifyRemoteSyncResume(
+              metadata: restarted.metadata,
+              hasRemainingEntries: restarted.hasPendingSyncs,
+            ),
+            evictPending
+                ? RemoteSyncResumeDisposition.restartIncomplete
+                : RemoteSyncResumeDisposition.retainPending,
+          );
+          if (!evictPending) {
+            expect(restarted.getPendingSyncs().single.remoteDocId, 'note-2');
+            await restarted.markCompleted('note-2');
+            expect(restarted.metadata!.isCommitReady, isTrue);
+          }
+        },
+      );
+    }
+
+    test('a failed page write cannot advance the cached cursor', () async {
+      final fs = _MemoryFileSystem();
+      final cache = RemoteSyncCacheService.forTesting(() async => fs);
+      await cache.init();
+      await cache.startNewSync(null, ownerUid: 'account-a');
+      await cache.markAllPagesFetched();
+      fs.failReads = true;
+      await expectLater(
+        cache.addPage(_page(hasMore: false), maxCursor: _cursor),
+        throwsStateError,
+      );
+      expect(cache.lastCursor, isNull);
+      expect(cache.pages, isEmpty);
+      fs.failReads = false;
+      await cache.addPage(_page(hasMore: false), maxCursor: _cursor);
+      final restored = RemoteSyncCacheService.forTesting(() async => fs);
+      await restored.init();
+      expect(restored.lastCursor, _cursor);
+      expect(restored.getPendingSyncs().single.remoteDocId, 'note-1');
+    });
+
+    for (final replaceSession in [false, true]) {
+      test(
+        'interrupted page publication is isolated (replace session: $replaceSession)',
+        () async {
+          final started = Completer<void>();
+          final resume = Completer<void>();
+          final fs = _MemoryFileSystem();
+          final cache = RemoteSyncCacheService.forTesting(() async => fs);
+          await cache.startNewSync(null, ownerUid: 'first');
+          fs.beforePageCopy = () {
+            started.complete();
+            return resume.future;
+          };
+          var active = true;
+          final result = expectLater(
+            runCloudOperation(
+              () => active,
+              () => cache.addPage(_page(hasMore: false), maxCursor: _cursor),
+            ),
+            throwsA(isA<CloudOperationCancelled>()),
+          );
+          await started.future;
+          fs.beforePageCopy = null;
+          if (replaceSession) {
+            // Sign-out invalidates synchronously while the filesystem copy is in flight.
+            cache.resetAfterSignOut();
+            final replacement = cache
+                .startNewSync(null, ownerUid: 'second')
+                .then(
+                  (_) => cache.addPage(_page(hasMore: false, id: 'new-note')),
+                );
+            resume.complete();
+            await result;
+            await replacement;
+            final reopened = RemoteSyncCacheService.forTesting(() async => fs);
+            await reopened.init();
+            expect(reopened.metadata?.ownerUid, 'second');
+            expect(reopened.getPendingSyncs().single.remoteDocId, 'new-note');
+          } else {
+            active = false;
+            resume.complete();
+            await result;
+            expect(cache.pages, isEmpty);
+            expect(cache.lastCursor, isNull);
+            expect(fs.files.keys.map(path.basename), ['metadata.json']);
+          }
+        },
+      );
+    }
+
+    test('queued metadata saves retain a concurrently appended page', () async {
+      final started = Completer<void>();
+      final resume = Completer<void>();
+      final fs = _MemoryFileSystem()
+        ..beforePageCopy = () {
+          started.complete();
+          return resume.future;
+        };
+      final cache = RemoteSyncCacheService.forTesting(() async => fs);
+      await cache.startNewSync(null);
+      final append = cache.addPage(_page(hasMore: false), maxCursor: _cursor);
+      await started.future;
+      final fetched = cache.markAllPagesFetched();
+      resume.complete();
+      await Future.wait([append, fetched]);
+
+      final reopened = RemoteSyncCacheService.forTesting(() async => fs);
+      await reopened.init();
+      expect(reopened.metadata?.allPagesFetched, isTrue);
+      expect(reopened.lastCursor, _cursor);
+      expect(reopened.getPendingSyncs().single.remoteDocId, 'note-1');
+    });
 
     test('an interrupted page cannot become commit-ready', () async {
       final fileSystem = _MemoryFileSystem();
@@ -270,16 +411,17 @@ const _cursor = CloudSyncCursor(
 
 PendingRemoteSyncPage _page({
   required bool hasMore,
+  String id = 'note-1',
   PendingRemoteSyncStatus status = PendingRemoteSyncStatus.pending,
 }) {
   return PendingRemoteSyncPage(
     pageIndex: 0,
     hasMore: hasMore,
-    lastDocumentId: 'note-1',
+    lastDocumentId: id,
     syncs: {
-      'note-1': PendingRemoteSync(
+      id: PendingRemoteSync(
         localId: 1,
-        remoteDocId: 'note-1',
+        remoteDocId: id,
         remoteData: {'local_id': 1, 'updated_at': '2026-07-29T00:00:00.000Z'},
         fetchedAt: DateTime.utc(2026, 7, 29),
         status: status,
@@ -289,6 +431,7 @@ PendingRemoteSyncPage _page({
 }
 
 class _MemoryFileSystem implements FileSystem {
+  Future<void> Function()? beforePageCopy;
   bool failReads = false;
   bool failDeletes = false;
   bool failDirectoryCheck = false;
@@ -334,6 +477,13 @@ class _MemoryFileSystem implements FileSystem {
       : Uint8List.fromList(files[filePath] ?? (throw StateError('missing')));
 
   @override
+  Future<void> deleteTrees(List<String> paths) async {
+    files.removeWhere(
+      (key, _) => paths.any((p) => key == p || key.startsWith('$p/')),
+    );
+  }
+
+  @override
   Future<bool> delete(String filePath) async =>
       !failDeletes && files.remove(filePath) != null;
 
@@ -360,6 +510,7 @@ class _MemoryFileSystem implements FileSystem {
 
   @override
   Future<String> copy(String sourcePath, String targetPath) async {
+    if (targetPath.endsWith('/page_0.json')) await beforePageCopy?.call();
     await writeBytes(targetPath, await readBytes(sourcePath));
     return targetPath;
   }

@@ -1,6 +1,6 @@
 {
 	"name": "better-keep-notes",
-	"version": "1.2.2",
+	"version": "1.5.0",
 	"description": "Better Keep Notes - Build Scripts",
 	"scripts": {
 		"build": "node tool/build_tasks.mjs",
@@ -37,6 +37,7 @@
 		"cross-spawn": "7.0.6",
 		"firebase": "12.16.0",
 		"firebase-tools": "15.32.1",
-		"proxy-agent": "^8.0.2"
+		"proxy-agent": "^8.0.2",
+		"puppeteer-core": "25.5.0"
 	}
 }

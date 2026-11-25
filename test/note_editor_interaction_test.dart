@@ -48,7 +48,7 @@ void main() {
       final cellFinder = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .first;
       await tester.tap(cellFinder);
@@ -67,7 +67,9 @@ void main() {
       );
       expect(toolbar.controller, same(cell.controller));
       expect(cell.focusNode.hasPrimaryFocus, true);
-      final root = tester.widget<QuillEditor>(find.byType(QuillEditor).first);
+      final root = tester.widget<QuillEditor>(
+        find.bySubtype<QuillEditor>().first,
+      );
       final original = jsonEncode(root.controller.document.toDelta().toJson());
       await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
       await tester.pump();
@@ -145,7 +147,7 @@ void main() {
       expect(mainToolbar.controller, same(root.controller));
       expect(
         tester
-            .widget<QuillEditor>(find.byType(QuillEditor).first)
+            .widget<QuillEditor>(find.bySubtype<QuillEditor>().first)
             .config
             .showCursor,
         isTrue,
@@ -177,10 +179,12 @@ void main() {
         },
       ],
     );
-    final root = tester.widget<QuillEditor>(find.byType(QuillEditor).first);
+    final root = tester.widget<QuillEditor>(
+      find.bySubtype<QuillEditor>().first,
+    );
     final cells = find.descendant(
       of: find.byType(NoteTableView),
-      matching: find.byType(QuillEditor),
+      matching: find.bySubtype<QuillEditor>(),
     );
     final cell = tester.widget<QuillEditor>(cells.first);
     final scroll = root.scrollController;
@@ -240,7 +244,7 @@ void main() {
         {'insert': 'BeforeAfter\n'},
       ],
     );
-    final root = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final root = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     root.focusNode.requestFocus();
     await tester.pumpAndSettle();
     root.controller.updateSelection(
@@ -256,11 +260,14 @@ void main() {
     final table = find.byType(NoteTableView);
     final cells = find.descendant(
       of: table,
-      matching: find.byType(QuillEditor),
+      matching: find.bySubtype<QuillEditor>(),
     );
     expect(
       tester.getSize(table).width,
-      closeTo(tester.getSize(find.byType(QuillEditor).first).width - 32, 0.1),
+      closeTo(
+        tester.getSize(find.bySubtype<QuillEditor>().first).width - 32,
+        0.1,
+      ),
     );
     await tester.tap(cells.first);
     await tester.pump();
@@ -337,7 +344,7 @@ void main() {
           ];
           await _pumpNoteEditor(tester, bodyDelta: tableDelta);
           final root = tester.widget<QuillEditor>(
-            find.byType(QuillEditor).first,
+            find.bySubtype<QuillEditor>().first,
           );
           final owner = root;
           final original = adjacent ? '\uFFFC\n\uFFFC\n' : '\uFFFC\n';
@@ -345,7 +352,7 @@ void main() {
           final cell = find
               .descendant(
                 of: find.byKey(ValueKey(table.id)),
-                matching: find.byType(QuillEditor),
+                matching: find.bySubtype<QuillEditor>(),
               )
               .first;
           final boundary = find.byKey(
@@ -423,7 +430,9 @@ void main() {
         ],
       );
       await tester.pumpAndSettle();
-      final root = tester.widget<QuillEditor>(find.byType(QuillEditor).first);
+      final root = tester.widget<QuillEditor>(
+        find.bySubtype<QuillEditor>().first,
+      );
       final viewport = find.byKey(ValueKey('table_horizontal_${table.id}'));
       final horizontal = tester
           .widget<SingleChildScrollView>(viewport)
@@ -471,7 +480,7 @@ void main() {
       final cell = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .first;
       await tester.tap(cell);
@@ -511,11 +520,13 @@ void main() {
           },
         ],
       );
-      final root = tester.widget<QuillEditor>(find.byType(QuillEditor).first);
+      final root = tester.widget<QuillEditor>(
+        find.bySubtype<QuillEditor>().first,
+      );
       final firstCell = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .first;
       final horizontal = tester
@@ -657,7 +668,7 @@ void main() {
           {'insert': 'BeforeAfter\n'},
         ],
       );
-      final root = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final root = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       final offset =
           root.controller.document.toPlainText().indexOf('BeforeAfter') + 6;
       root.controller.updateSelection(
@@ -705,7 +716,7 @@ void main() {
       final cellFinder = find
           .descendant(
             of: find.byType(NoteTableView),
-            matching: find.byType(QuillEditor),
+            matching: find.bySubtype<QuillEditor>(),
           )
           .last;
       await tester.tap(cellFinder);
@@ -759,11 +770,11 @@ void main() {
           for (final line in lines) {'insert': '$line\n'},
         ],
       );
-      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       final surface = tester.getRect(
         find.byKey(const ValueKey('note_editor_scroll_surface')),
       );
-      final editorRect = tester.getRect(find.byType(QuillEditor));
+      final editorRect = tester.getRect(find.bySubtype<QuillEditor>());
       expect(surface.bottom, greaterThan(editorRect.bottom + 40));
       expect(editor.focusNode.hasFocus, isFalse);
 
@@ -779,7 +790,7 @@ void main() {
       expect(find.byKey(const Key('note_editor_toolbar')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
     }
   });
 
@@ -795,7 +806,7 @@ void main() {
         {'insert': 'First line\nSecond line\n'},
       ],
     );
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
 
     await tester.tap(find.text('First line', findRichText: true));
     await tester.pump();
@@ -810,6 +821,8 @@ void main() {
     await tester.pump();
     expect(title.focusNode?.hasFocus, isTrue);
     expect(editor.focusNode.hasFocus, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
   });
 
   testWidgets('vertical selection restarts from an arrow-collapsed caret', (
@@ -824,7 +837,7 @@ void main() {
         {'insert': 'first line\nsecond line\nthird line\n'},
       ],
     );
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     final editorState = editor.config.editorKey!.currentState!;
     final lastLineCaret = editor.controller.document.length - 1;
     editor.controller.updateSelection(
@@ -878,7 +891,7 @@ void main() {
           {'insert': 'first line\nsecond line\nthird line\n'},
         ],
       );
-      final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+      final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
       editor.focusNode.requestFocus();
       editor.controller.updateSelection(
         const TextSelection(baseOffset: 2, extentOffset: 25),
@@ -929,7 +942,7 @@ void main() {
         {'insert': '\n'},
       ],
     );
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     expect(editor.config.customRecognizerBuilder, isNotNull);
     final linkedText = find.text(linkText, findRichText: true);
     final mouse = await tester.createGesture(
@@ -996,7 +1009,7 @@ void main() {
 
       expect(
         tester
-            .widget<QuillEditor>(find.byType(QuillEditor))
+            .widget<QuillEditor>(find.bySubtype<QuillEditor>())
             .config
             .customRecognizerBuilder,
         isNull,
@@ -1080,7 +1093,7 @@ void main() {
         {'insert': '\n'},
       ],
     );
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     editor.controller.updateSelection(
       const TextSelection.collapsed(offset: 0),
       ChangeSource.local,
@@ -1116,7 +1129,7 @@ void main() {
       ],
       attachments: [NoteAttachment.sketch(SketchData())],
     );
-    final editor = tester.widget<QuillEditor>(find.byType(QuillEditor));
+    final editor = tester.widget<QuillEditor>(find.bySubtype<QuillEditor>());
     final sketch = find.byWidgetPredicate(
       (widget) => widget is CustomPaint && widget.painter is SketchPainter,
     );

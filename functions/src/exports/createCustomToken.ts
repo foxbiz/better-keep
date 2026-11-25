@@ -1,6 +1,7 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 import { HttpsError } from "firebase-functions/v2/https";
-import { auth } from "../config";
+import { cancelDeletion } from "../accountDeletionLifecycle";
+import { auth, db } from "../config";
 import { onNonReviewCall } from "../nonReviewCallable";
 
 /**
@@ -19,10 +20,12 @@ export default onNonReviewCall(async (request: CallableRequest) => {
 
 	try {
 		// Create a custom token for this user
+		await cancelDeletion(db, uid, "createCustomToken");
 		const customToken = await auth.createCustomToken(uid);
 
 		return { token: customToken };
 	} catch (error) {
+		if (error instanceof HttpsError) throw error;
 		console.error("Error creating custom token:", error);
 		throw new HttpsError("internal", "Failed to create authentication token");
 	}

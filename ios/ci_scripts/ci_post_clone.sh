@@ -14,8 +14,10 @@ git config --system --unset-all https.proxy 2>/dev/null || true
 git config --global http.proxy ""
 git config --global https.proxy ""
 
-# Clone Flutter latest stable directly into $HOME (avoids Homebrew permission issues on Xcode Cloud)
-git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
+# Clone the Flutter version in .fvmrc directly into $HOME (avoids Homebrew permission issues on Xcode Cloud)
+FLUTTER_VERSION=$(plutil -extract flutter raw "$CI_PRIMARY_REPOSITORY_PATH/.fvmrc")
+echo "--- Pinned Flutter: $FLUTTER_VERSION ---"
+git clone https://github.com/flutter/flutter.git --depth 1 -b "$FLUTTER_VERSION" "$HOME/flutter"
 
 export PATH="$HOME/flutter/bin:$PATH"
 

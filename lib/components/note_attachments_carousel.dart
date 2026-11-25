@@ -1,6 +1,8 @@
+import 'package:better_keep/services/iphone_duo.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_attachment.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/pages/image_viewer.dart';
 import 'package:better_keep/pages/sketch_page.dart';
 import 'package:better_keep/components/sketch_painter.dart';
@@ -63,138 +65,153 @@ class _NoteAttachmentsCarouselState extends State<NoteAttachmentsCarousel> {
 
     if (totalCount == 0) return const SizedBox.shrink();
 
-    return SizedBox(
-      height: widget.height,
-      child: ListView.builder(
-        controller: widget.scrollController,
-        scrollDirection: Axis.horizontal,
-        itemCount: totalCount,
-        itemBuilder: (context, index) {
-          final attachment = visualAttachments[index];
-          final isImage = attachment.type == AttachmentType.image;
+    return HeroMode(
+      enabled: NotePaneHost.heroesEnabled(context),
+      child: SizedBox(
+        height: widget.height,
+        child: ListView.builder(
+          controller: widget.scrollController,
+          scrollDirection: Axis.horizontal,
+          itemCount: totalCount,
+          itemBuilder: (context, index) {
+            final attachment = visualAttachments[index];
+            final isImage = attachment.type == AttachmentType.image;
 
-          if (isImage) {
-            final image = attachment.image!;
-            final heroTag = 'image_${widget.note.id}_${image.src}';
-            return Padding(
-              padding: EdgeInsets.only(
-                left: index == 0 ? 8 : 8,
-                right: index == totalCount - 1 ? 8 : 0,
-                top: 8,
-                bottom: 8,
-              ),
-              child: GestureDetector(
-                onTap: () async {
-                  await showPage(
-                    context,
-                    ImageViewer(
-                      note: widget.note,
-                      image: image,
-                      attachment: attachment,
-                      heroTag: heroTag,
-                    ),
-                  );
+            if (isImage) {
+              final image = attachment.image!;
+              final heroTag = 'image_${widget.note.id}_${image.src}';
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: index == 0 ? 8 : 8,
+                  right: index == totalCount - 1 ? 8 : 0,
+                  top: 8,
+                  bottom: 8,
+                ),
+                child: GestureDetector(
+                  onTap: () async {
+                    await showPage(
+                      context,
+                      ImageViewer(
+                        note: widget.note,
+                        image: image,
+                        attachment: attachment,
+                        heroTag: heroTag,
+                      ),
+                    );
 
-                  if (widget.onPop != null) {
-                    widget.onPop!();
-                  }
-                },
-                child: Hero(
-                  tag: heroTag,
-                  child: AspectRatio(
-                    aspectRatio: image.ratio,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: UniversalImage(
-                        path: image.src,
-                        fit: BoxFit.cover,
-                        passwordProtectedDecoder:
-                            widget.note.locked && widget.note.unlocked
-                            ? widget.note.decryptAttachmentForSession
-                            : null,
+                    if (widget.onPop != null) {
+                      widget.onPop!();
+                    }
+                  },
+                  child: Hero(
+                    tag: heroTag,
+                    child: AspectRatio(
+                      aspectRatio: image.ratio,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: UniversalImage(
+                          path: image.src,
+                          fit: BoxFit.cover,
+                          passwordProtectedDecoder:
+                              widget.note.locked && widget.note.unlocked
+                              ? widget.note.decryptAttachmentForSession
+                              : null,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          } else {
-            final sketch = attachment.sketch!;
-            final sketchIndex = widget.note.sketches.indexOf(sketch);
-            final heroTag = sketch.previewImage != null
-                ? 'sketch_${widget.note.id}_${sketch.previewImage}'
-                : null;
-            return Padding(
-              padding: EdgeInsets.only(
-                left: index == 0 ? 8 : 8,
-                right: index == totalCount - 1 ? 8 : 0,
-                top: 8,
-                bottom: 8,
-              ),
-              child: GestureDetector(
-                onTap: () async {
-                  await showPage(
-                    context,
-                    SketchPage(
-                      note: widget.note,
-                      sketch: sketch,
-                      heroTag: heroTag,
-                      initialIndex: sketchIndex >= 0 ? sketchIndex : null,
-                    ),
-                    allowFullScreen: true,
-                  );
+              );
+            } else {
+              final sketch = attachment.sketch!;
+              final sketchIndex = widget.note.sketches.indexOf(sketch);
+              final heroTag = sketch.previewImage != null
+                  ? 'sketch_${widget.note.id}_${sketch.previewImage}'
+                  : null;
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: index == 0 ? 8 : 8,
+                  right: index == totalCount - 1 ? 8 : 0,
+                  top: 8,
+                  bottom: 8,
+                ),
+                child: GestureDetector(
+                  onTap: () async {
+                    await openBesideNote(
+                      context,
+                      SketchPage(
+                        note: widget.note,
+                        sketch: sketch,
+                        heroTag: heroTag,
+                        initialIndex: sketchIndex >= 0 ? sketchIndex : null,
+                      ),
+                      noteStaysEditable: true,
+                    );
 
-                  if (widget.onPop != null) {
-                    widget.onPop!();
-                  }
-                },
-                child: sketch.previewImage != null
-                    ? Hero(
-                        tag: heroTag!,
-                        child: AspectRatio(
+                    if (widget.onPop != null) {
+                      widget.onPop!();
+                    }
+                  },
+                  child: sketch.previewImage != null
+                      ? Hero(
+                          tag: heroTag!,
+                          // A note can end up beside the sketch by unfolding.
+                          placeholderBuilder: !isIPhoneDuo
+                              ? null
+                              : (context, size, child) => SizedBox.fromSize(
+                                  size: size,
+                                  child: Builder(
+                                    builder: (context) =>
+                                        NotePaneHost.hasPageBeside(context)
+                                        ? child
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ),
+                          child: AspectRatio(
+                            aspectRatio: sketch.aspectRatio > 0
+                                ? sketch.aspectRatio
+                                : 1.0,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: UniversalImage(
+                                // Use blurredThumbnail hash as key to force reload when sketch content changes
+                                key: ValueKey(
+                                  '${sketch.previewImage}_${sketch.blurredThumbnail?.hashCode ?? 0}',
+                                ),
+                                path: sketch.previewImage!,
+                                fit: BoxFit.contain,
+                                passwordProtectedDecoder:
+                                    widget.note.locked && widget.note.unlocked
+                                    ? widget.note.decryptAttachmentForSession
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        )
+                      : AspectRatio(
                           aspectRatio: sketch.aspectRatio > 0
                               ? sketch.aspectRatio
                               : 1.0,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: UniversalImage(
-                              // Use blurredThumbnail hash as key to force reload when sketch content changes
-                              key: ValueKey(
-                                '${sketch.previewImage}_${sketch.blurredThumbnail?.hashCode ?? 0}',
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: sketch.backgroundColor,
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CustomPaint(
+                                painter: SketchPainter(strokes: sketch.strokes),
+                                size: Size.infinite,
                               ),
-                              path: sketch.previewImage!,
-                              fit: BoxFit.contain,
-                              passwordProtectedDecoder:
-                                  widget.note.locked && widget.note.unlocked
-                                  ? widget.note.decryptAttachmentForSession
-                                  : null,
                             ),
                           ),
                         ),
-                      )
-                    : AspectRatio(
-                        aspectRatio: sketch.aspectRatio > 0
-                            ? sketch.aspectRatio
-                            : 1.0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: sketch.backgroundColor,
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: CustomPaint(
-                              painter: SketchPainter(strokes: sketch.strokes),
-                              size: Size.infinite,
-                            ),
-                          ),
-                        ),
-                      ),
-              ),
-            );
-          }
-        },
+                ),
+              );
+            }
+          },
+        ),
       ),
     );
   }

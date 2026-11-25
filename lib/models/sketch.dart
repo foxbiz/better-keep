@@ -35,7 +35,7 @@ enum PagePattern {
   dotGrid;
 
   IconData get icon => switch (this) {
-    PagePattern.blank => CustomIcons.fileEmpty,
+    PagePattern.blank => CustomIcons.emptyPage,
     PagePattern.singleLine => Icons.horizontal_rule,
     PagePattern.doubleLine => Icons.dehaze,
     PagePattern.grid => Icons.grid_4x4,
@@ -264,6 +264,10 @@ class SketchData {
       if (blurredThumbnail != null) 'blurredThumbnail': blurredThumbnail,
       if (strokesContentHash != null) 'strokesContentHash': strokesContentHash,
       if (hasEncryptedStrokes) 'encryptedStrokes': encryptedStrokes,
+      // The oldest PIN payloads contain only strokes. Keep their existing
+      // drawing defaults until PIN-authenticated migration writes a full file.
+      if (hasEncryptedStrokes) 'bgColor': backgroundColor.toARGB32(),
+      if (hasEncryptedStrokes) 'pagePattern': pagePattern.name,
     };
   }
 
@@ -321,7 +325,10 @@ class SketchData {
     }
   }
 
-  factory SketchData.fromJson(Map<String, dynamic> json) {
+  factory SketchData.fromJson(
+    Map<String, dynamic> json, {
+    bool strict = false,
+  }) {
     try {
       // Check if strokes are encrypted (from locked note)
       final encryptedStrokes = json['encryptedStrokes'] as String?;
@@ -342,19 +349,14 @@ class SketchData {
         parsedStrokes = (json['strokes'] as List)
             .map((e) => SketchStroke.parse(e))
             .toList();
-        bgColor = Color(json['bgColor'] as int? ?? 0xFFFFFFFF);
-        pattern = PagePattern.values.firstWhere(
-          (e) => e.name == json['pagePattern'],
-          orElse: () => PagePattern.blank,
-        );
-      } else if (encryptedStrokes == null && json['bgColor'] != null) {
-        // Fallback: if bgColor exists but no strokes, parse colors anyway
-        bgColor = Color(json['bgColor'] as int? ?? 0xFFFFFFFF);
-        pattern = PagePattern.values.firstWhere(
-          (e) => e.name == json['pagePattern'],
-          orElse: () => PagePattern.blank,
-        );
       }
+      // Legacy list-only PIN ciphertext relies on these separate defaults.
+      // An encrypted metadata source can override them after authentication.
+      bgColor = Color(json['bgColor'] as int? ?? 0xFFFFFFFF);
+      pattern = PagePattern.values.firstWhere(
+        (e) => e.name == json['pagePattern'],
+        orElse: () => PagePattern.blank,
+      );
 
       return SketchData(
         strokes: parsedStrokes,
@@ -370,6 +372,9 @@ class SketchData {
         strokesContentHash: json['strokesContentHash'] as String?,
       );
     } catch (e) {
+      if (strict) {
+        throw const FormatException('Sketch data could not be decoded');
+      }
       AppLogger.error('Error parsing sketch data', e);
       return SketchData();
     }

@@ -29,7 +29,7 @@ const screenshot = (() => {
     return screenshotById['6'];
   }
   if (page.slug === 'security' || page.slug === 'private-encrypted-notes') {
-    return screenshotById['4'];
+    return screenshotById['approved-device-sync-ios'];
   }
   return screenshotById['2'];
 })();
@@ -158,7 +158,12 @@ if (page.faqs?.length) {
           page.comparison && (
             <section>
               <h2>At a glance</h2>
-              <div class="comparison-wrap">
+              <div
+                class="comparison-wrap"
+                role="region"
+                tabindex="0"
+                aria-label={`Comparison of Better Keep and ${page.comparison.alternativeLabel}`}
+              >
                 <table>
                   <thead>
                     <tr>
@@ -218,10 +223,9 @@ if (page.faqs?.length) {
         <p class="eyebrow">Try Better Keep</p>
         <h2>Start with local notes.</h2>
         <p>
-          An account is required. Local notes are free. Optional encrypted
-          cloud sync requires Pro.
+          Sign in to write offline and sync manually with your own storage for free.
         </p>
-        <p><a href="/pricing">Compare Free and Pro</a></p>
+        <p><a href="/pricing">Compare plans</a></p>
         <StoreActions compact={true} appleCampaign={isKeepGuide ? 'keep_import_guide' : undefined} />
         {
           page.slug === 'google-keep-alternative' && (

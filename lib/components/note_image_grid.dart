@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/components/universal_image.dart';
 import 'package:better_keep/models/note_image.dart';
 import 'package:flutter/material.dart';
@@ -135,7 +136,13 @@ class NoteImageGrid extends StatelessWidget {
     // Wrap in Hero for smooth transition to note editor
     if (noteId != null && image.src.isNotEmpty) {
       final heroTag = 'image_${noteId}_${image.src}';
-      imageWidget = Hero(tag: heroTag, child: imageWidget);
+      final tile = imageWidget;
+      // A note beside the list would leave its Hero's empty placeholder here.
+      imageWidget = Builder(
+        builder: (context) => NotePaneHost.isSideBySide(context)
+            ? tile
+            : Hero(tag: heroTag, child: tile),
+      );
     }
 
     return Container(

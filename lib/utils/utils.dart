@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:better_keep/config.dart';
+import 'package:better_keep/pages/home/note_pane.dart';
 import 'package:better_keep/state.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -9,6 +10,21 @@ bool isDark(Color? color) {
   if (color == null) return false;
   return color == Colors.transparent ||
       ThemeData.estimateBrightnessForColor(color) == Brightness.dark;
+}
+
+/// [preferred] when it stands out on [background] by at least [minContrast],
+/// and [fallback] otherwise. Notes can be any color, so a fixed color such as
+/// green can disappear on one.
+Color visibleOn(
+  Color background,
+  Color preferred, {
+  required Color fallback,
+  double minContrast = 3,
+}) {
+  final a = background.computeLuminance() + 0.05;
+  final b = preferred.computeLuminance() + 0.05;
+  final contrast = a > b ? a / b : b / a;
+  return contrast >= minContrast ? preferred : fallback;
 }
 
 bool _isMobilePlatform() {
@@ -21,12 +37,23 @@ bool isBigScreen(BuildContext context) {
       !_isMobilePlatform();
 }
 
+/// Opens [page] on top. A note that is open beside the list of [context] is
+/// saved and closed first; if it cannot be saved, [page] does not open and the
+/// result is null.
 Future<dynamic> showPage(
   BuildContext context,
   Widget page, {
   bool allowFullScreen = false,
 }) {
   final bigScreen = isBigScreen(context);
+  final navigator = Navigator.of(context);
+  final closing = NotePaneHost.closeNote(context);
+  Future<dynamic> push(Route<dynamic> route) => closing == null
+      ? navigator.push(route)
+      : closing.then(
+          (closed) =>
+              closed && navigator.mounted ? navigator.push(route) : null,
+        );
 
   if (bigScreen) {
     // Skip barrier only when stacking on a non-fullscreen dialog (to avoid double-dim).
@@ -35,8 +62,7 @@ Future<dynamic> showPage(
     final parentIsWindowedDialog =
         parentRoute is _DialogPageRoute &&
         !(parentRoute.allowFullScreen && AppState.editorFullScreen);
-    return Navigator.push(
-      context,
+    return push(
       _DialogPageRoute(
         page: page,
         showBarrier: !parentIsWindowedDialog,
@@ -44,10 +70,7 @@ Future<dynamic> showPage(
       ),
     );
   } else {
-    return Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => page),
-    );
+    return push(MaterialPageRoute(builder: (context) => page));
   }
 }
 

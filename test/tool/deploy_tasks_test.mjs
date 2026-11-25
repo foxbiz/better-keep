@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
 	DEPLOY_TARGET_NAMES,
@@ -24,10 +24,7 @@ function assertHostingCachePolicy(hosting) {
 		cacheControlFor(hosting, "/_astro/**"),
 		"public, max-age=31536000, immutable",
 	);
-	assert.equal(
-		cacheControlFor(hosting, "/media/**"),
-		"public, max-age=86400",
-	);
+	assert.equal(cacheControlFor(hosting, "/media/**"), "public, max-age=86400");
 	assert.ok(
 		hosting.headers.findIndex((entry) => entry.source === "/media/**") >
 			hosting.headers.findIndex((entry) => entry.source === "**"),
@@ -49,19 +46,22 @@ function assertWelcomeRedirects(hosting) {
 }
 
 function headerValue(hosting, key) {
-	return hosting.headers.find((entry) => entry.source === "**")
+	return hosting.headers
+		.find((entry) => entry.source === "**")
 		?.headers.find((header) => header.key === key)?.value;
 }
 
 test("lists deployment targets and treats an omitted target as help", () => {
-	assert.deepEqual(parseDeployTaskArguments([]), {help: true});
-	assert.deepEqual(parseDeployTaskArguments(["help"]), {help: true});
+	assert.deepEqual(parseDeployTaskArguments([]), { help: true });
+	assert.deepEqual(parseDeployTaskArguments(["help"]), { help: true });
 	assert.deepEqual(DEPLOY_TARGET_NAMES, [
 		"backend",
-		"hosting",
 		"hosting-admin",
-		"hosting-admin-preview",
-		"hosting-public",
+		"hosting-app-beta",
+		"hosting-app-prod",
+		"hosting-beta",
+		"hosting-prod",
+		"hosting-web",
 		"indexnow",
 	]);
 	assert.match(formatDeployTaskHelp(), /npm run deploy <target>/);
@@ -95,95 +95,48 @@ test("preserves the scoped backend deployment", () => {
 	]);
 });
 
-test("builds the combined website before deploying only Hosting", () => {
-	const operations = resolveDeployTask(["hosting", "--debug"]).operations;
-	assert.deepEqual(operations[0], {
-		args: [],
-		command: "./scripts/build_web.sh",
-		type: "process",
-	});
-	assert.deepEqual(operations[1], {
-		args: [
-			"--",
-			"deploy",
-			"--config",
-			"firebase.deploy.json",
-			"--project",
-			"better-keep-notes",
-			"--only",
-			"hosting:public,hosting:admin",
-			"--debug",
-		],
-		type: "firebase",
-	});
-	assert.deepEqual(operations[2], {
-		args: [
-			"scripts/verify_admin_deployment.mjs",
-			"--local",
-			"build/admin/index.html",
-			"--url",
-			"https://admin.betterkeep.app/",
-		],
-		command: "node",
-		type: "process",
-	});
-});
-
-test("the isolated admin deployment verifies its production asset", () => {
-	const operations = resolveDeployTask(["hosting-admin"]).operations;
-	assert.deepEqual(operations.at(-1), {
-		args: [
-			"scripts/verify_admin_deployment.mjs",
-			"--local",
-			"build/admin/index.html",
-			"--url",
-			"https://admin.betterkeep.app/",
-		],
-		command: "node",
-		type: "process",
-	});
-});
-
-test("builds both artifacts before publishing the isolated admin preview channel", () => {
-	const operations = resolveDeployTask(["hosting-admin-preview", "--debug"]).operations;
-	assert.deepEqual(operations[0], {
-		args: [],
-		command: "./scripts/build_web.sh",
-		type: "process",
-	});
-	assert.deepEqual(operations[1], {
-		args: [
-			"--",
-			"hosting:channel:deploy",
-			"admin-preview",
-			"--expires",
-			"7d",
-			"--no-authorized-domains",
-			"--only",
-			"admin",
-			"--config",
-			"firebase.deploy.json",
-			"--project",
-			"better-keep-notes",
-			"--debug",
-		],
-		type: "firebase",
-	});
+test("Hosting commands use the scoped release runner and reject unsafe overrides", () => {
+	for (const target of DEPLOY_TARGET_NAMES.filter(
+		(name) => name.startsWith("hosting-") && name !== "hosting-admin",
+	)) {
+		assert.deepEqual(resolveDeployTask([target, "--prepare-only"]).operations, [
+			{
+				args: ["tool/hosting_release.mjs", target, "--prepare-only"],
+				command: "node",
+				type: "process",
+			},
+		]);
+		assert.throws(
+			() => resolveDeployTask([target, "--only", "functions"]),
+			/Hosting accepts only/,
+		);
+	}
+	for (const old of ["hosting", "hosting-public", "hosting-admin-preview"])
+		assert.throws(() => resolveDeployTask([old]), /Unknown deployment target/);
 });
 
 test("production Hosting isolates public and administrator artifacts", () => {
 	const config = JSON.parse(readFileSync("firebase.deploy.json", "utf8"));
-	const publicHosting = config.hosting.find((hosting) => hosting.target === "public");
-	const adminHosting = config.hosting.find((hosting) => hosting.target === "admin");
+	const publicHosting = config.hosting.find(
+		(hosting) => hosting.target === "public",
+	);
+	const adminHosting = config.hosting.find(
+		(hosting) => hosting.target === "admin",
+	);
 	assert.equal(publicHosting.public, "build/web");
 	assert.equal(adminHosting.public, "build/admin");
 	assertHostingCachePolicy(publicHosting);
 	assert.deepEqual(publicHosting.rewrites, [
-		{source: "/oauth/start", function: "oauthStart"},
-		{source: "/oauth/apple", function: "desktopAppleAuth"},
-		{source: "/oauth/callback", function: "oauthCallback"},
-		{source: "/s/**", destination: "/s/index.html"},
-		{source: "/app/**", destination: "/app/index.html"},
+		{ source: "/oauth/storage/start", function: "storageOAuthStart" },
+		{
+			source: "/oauth/storage/callback",
+			destination: "/app/storage-auth.html",
+		},
+		{ source: "/oauth/start", function: "oauthStart" },
+		{ source: "/oauth/apple", function: "desktopAppleAuth" },
+		{ source: "/oauth/callback", function: "oauthCallback" },
+		{ source: "/s/**", destination: "/s/index.html" },
+		{ source: "/app/**", destination: "/app/index.html" },
 	]);
 	assert.ok(
 		publicHosting.headers.some(
@@ -198,14 +151,23 @@ test("production Hosting isolates public and administrator artifacts", () => {
 	);
 	assertWelcomeRedirects(publicHosting);
 	assert.equal(headerValue(adminHosting, "Cache-Control"), "no-store");
-	assert.equal(headerValue(adminHosting, "X-Robots-Tag"), "noindex, nofollow, noarchive");
+	assert.equal(
+		headerValue(adminHosting, "X-Robots-Tag"),
+		"noindex, nofollow, noarchive",
+	);
 	assert.equal(headerValue(adminHosting, "Referrer-Policy"), "no-referrer");
-	assert.match(headerValue(adminHosting, "Content-Security-Policy"), /default-src 'none'/);
+	assert.match(
+		headerValue(adminHosting, "Content-Security-Policy"),
+		/default-src 'none'/,
+	);
 	assert.match(
 		headerValue(adminHosting, "Content-Security-Policy"),
 		/connect-src[^;]*https:\/\/content-firebaseappcheck\.googleapis\.com/,
 	);
-	assert.doesNotMatch(headerValue(adminHosting, "Content-Security-Policy"), /unsafe-inline/);
+	assert.doesNotMatch(
+		headerValue(adminHosting, "Content-Security-Policy"),
+		/unsafe-inline/,
+	);
 });
 
 test("the full emulator serves the same combined web artifact", () => {
@@ -215,17 +177,22 @@ test("the full emulator serves the same combined web artifact", () => {
 	assertHostingCachePolicy(config.hosting);
 	assertWelcomeRedirects(config.hosting);
 	assert.deepEqual(config.hosting.rewrites, [
-		{source: "/oauth/start", function: "oauthStart"},
-		{source: "/oauth/callback", function: "oauthCallback"},
-		{source: "/s/**", destination: "/s/index.html"},
-		{source: "/app/**", destination: "/app/index.html"},
+		{ source: "/oauth/storage/start", function: "storageOAuthStart" },
+		{
+			source: "/oauth/storage/callback",
+			destination: "/app/storage-auth.html",
+		},
+		{ source: "/oauth/start", function: "oauthStart" },
+		{ source: "/oauth/callback", function: "oauthCallback" },
+		{ source: "/s/**", destination: "/s/index.html" },
+		{ source: "/app/**", destination: "/app/index.html" },
 	]);
 });
 
 test("unknown deployment targets fail with help", async () => {
 	let stderr = "";
 	const exitCode = await runDeployTask(["unknown"], {
-		stderr: {write: (value) => (stderr += value)},
+		stderr: { write: (value) => (stderr += value) },
 	});
 	assert.equal(exitCode, 2);
 	assert.match(stderr, /Unknown deployment target/);
@@ -234,7 +201,7 @@ test("unknown deployment targets fail with help", async () => {
 
 test("Hosting deployment stops when the web build fails", async () => {
 	let firebaseCalls = 0;
-	const exitCode = await runDeployTask(["hosting"], {
+	const exitCode = await runDeployTask(["hosting-beta"], {
 		runFirebase: async () => {
 			firebaseCalls += 1;
 			return 0;
@@ -248,12 +215,39 @@ test("Hosting deployment stops when the web build fails", async () => {
 test("backend deployment preserves Firebase exit codes and environment", async () => {
 	const calls = [];
 	const exitCode = await runDeployTask(["backend"], {
-		processEnv: {BASE: "present"},
+		processEnv: { BASE: "present" },
 		runFirebase: async (args, options) => {
-			calls.push({args, options});
+			calls.push({ args, options });
 			return 4;
 		},
 	});
 	assert.equal(exitCode, 4);
 	assert.equal(calls[0].options.processEnv.BASE, "present");
+});
+
+test("admin deployment validates its bundle and cannot change scope", () => {
+	const steps = resolveDeployTask(["hosting-admin"]).operations;
+	assert.deepEqual(
+		steps.map((s) => s.type),
+		["process", "process", "firebase", "process"],
+	);
+	assert.deepEqual(steps[0].args, [
+		"--prefix",
+		"admin-site",
+		"run",
+		"build",
+		"--",
+		"--outDir",
+		"../build/admin",
+	]);
+	assert.deepEqual(steps[3].args, ["scripts/verify_admin_deployment.mjs"]);
+	assert.deepEqual(steps[1].args, [
+		"scripts/validate_admin_bundle.mjs",
+		"build/admin",
+	]);
+	assert.equal(steps[2].args.at(-1), "hosting:admin");
+	assert.throws(
+		() => resolveDeployTask(["hosting-admin", "--only", "functions"]),
+		/no overrides/,
+	);
 });

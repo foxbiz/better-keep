@@ -7,7 +7,6 @@ export type Feature = {
   description: string;
   icon: IconName;
   href: string;
-  number: string;
 };
 
 export type ScreenshotId = string;
@@ -28,52 +27,32 @@ export type ScreenshotItem = {
 
 export const primaryFeatures: readonly Feature[] = [
   {
-    number: '01',
     title: 'Rich-text editing',
     description:
-      'Add headings, lists, checklists, links, images, and sketches to your notes.',
+      'Add headings, lists, checklists, tables, links, photos, and sketches.',
     icon: 'TextCursorInput',
     href: '/rich-text-notes'
   },
   {
-    number: '02',
-    title: 'Private encrypted sync',
-    description:
-      'Keep notes on your device for free. Pro adds encrypted sync between approved devices.',
-    icon: 'ShieldCheck',
-    href: '/private-encrypted-notes'
-  },
-  {
-    number: '03',
     title: 'Works fully offline',
     description:
-      'Create, edit, search, pin, label, and organize without waiting for a network connection.',
+      'Create, edit, and search your notes without a network connection.',
     icon: 'CloudOff',
     href: '/offline-notes-app'
   },
   {
-    number: '04',
-    title: 'Phone, computer, and web',
-    description:
-      'Use Better Keep on Android, iOS, macOS, Windows, and the web.',
-    icon: 'MonitorSmartphone',
-    href: '/cross-platform-notes'
-  },
-  {
-    number: '05',
-    title: 'Find the note you need',
-    description:
-      'Group notes with labels, colors, and folders. Pin favorites or search your collection.',
-    icon: 'Folders',
-    href: '/rich-text-notes'
-  },
-  {
-    number: '06',
     title: 'Voice notes, made searchable',
     description:
-      'Attach recordings and use on-device transcription on supported native devices.',
+      'Attach recordings and transcribe them on supported native devices.',
     icon: 'AudioWaveform',
     href: '/voice-notes-transcription'
+  },
+  {
+    title: 'Easy to organize',
+    description:
+      'Use labels, colors, folders, and pins to keep notes where you expect them.',
+    icon: 'Folders',
+    href: '/rich-text-notes'
   }
 ] as const;
 
@@ -90,21 +69,4 @@ export const screenshotById = Object.freeze(
   Object.fromEntries(screenshots.map((screenshot) => [screenshot.id, screenshot]))
 ) as Readonly<Record<ScreenshotId, ScreenshotItem>>;
 
-export const heroScreenshots = [
-  screenshotById['5'],
-  screenshotById['2'],
-  screenshotById['6']
-] as const;
-
-export const securityScreenshot = screenshotById['4'];
-
-export const galleryScreenshots = [
-  screenshotById['5'],
-  screenshotById['table-ios'],
-  screenshotById['checklist-ios'],
-  screenshotById['6'],
-  screenshotById['2'],
-  screenshotById['4'],
-  screenshotById['7'],
-  screenshotById['3']
-] as const;
+export const syncScreenshot = screenshotById['external-sync-ios'];

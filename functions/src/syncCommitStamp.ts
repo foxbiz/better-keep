@@ -42,8 +42,7 @@ export function needsSyncCommitStamp(
 	if (before === null) return false;
 
 	return (
-		before.seconds === after.seconds &&
-		before.nanoseconds === after.nanoseconds
+		before.seconds === after.seconds && before.nanoseconds === after.nanoseconds
 	);
 }
 

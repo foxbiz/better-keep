@@ -11,9 +11,14 @@ import {
 	writeBillingActivity,
 } from "../billingActivity";
 import { auth, db, emailPassword } from "../config";
+import {
+	formatEmailDate,
+	generateTransactionalEmail,
+} from "../email_templates";
 import { enqueueRevenueEventInTransaction } from "../revenueOutbox";
 import { normalizedSubscriptionFields } from "../subscriptionEntitlement";
 import { recordSubscriptionIssue } from "../subscriptionIssues";
+import { appleSubscriptionProduct } from "../subscriptionProducts";
 import { reconcileUserEntitlement } from "../subscriptionReconciler";
 import { sendEmail } from "../utils";
 
@@ -185,6 +190,24 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 			return;
 		}
 
+		const product = appleSubscriptionProduct(productId ?? "");
+		if (!product) {
+			await recordSubscriptionIssue({
+				type: "app_store_unknown_product",
+				source: "app_store",
+				providerKey: originalTransactionId,
+				details: { productId },
+			});
+			await dedupeRef.set({
+				notificationType,
+				subtype,
+				productId,
+				status: "ignored_unknown_product",
+				processedAt: FieldValue.serverTimestamp(),
+			});
+			res.status(200).send("OK");
+			return;
+		}
 		const subscriptionId = `ios_${originalTransactionId}`;
 		const subscriptionRef = db.collection("subscriptions").doc(subscriptionId);
 		const subSnap = await subscriptionRef.get();
@@ -302,7 +325,7 @@ export default onRequest({ secrets: [emailPassword] }, async (req, res) => {
 											? "test"
 											: "unknown",
 								expiresAt,
-								plan: "pro",
+								plan: product.plan,
 								source: "app_store",
 								subscriptionState: decision.subscriptionState,
 								willAutoRenew,
@@ -497,7 +520,7 @@ async function sendAppStoreNotificationEmail(
 		let message: string;
 		let actionText: string | null = null;
 		let actionUrl: string | null = null;
-		let extraContent = "";
+		let feedbackRequested = false;
 		let replyTo: string | undefined;
 
 		if (
@@ -505,36 +528,26 @@ async function sendAppStoreNotificationEmail(
 			subtype === "AUTO_RENEW_DISABLED"
 		) {
 			subject = "Your Better Keep Notes Pro subscription has been cancelled";
-			heading = "Subscription Cancelled";
+			heading = "Subscription cancelled";
 			message = expiresAt
-				? `Your <strong>Better Keep Notes Pro</strong> subscription has been cancelled. You will continue to have access to Pro features until <strong>${expiresAt.toLocaleDateString()}</strong>.`
-				: "Your <strong>Better Keep Notes Pro</strong> subscription has been cancelled.";
-			extraContent = `
-				<p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
-					We would genuinely like to understand what led to this decision. Was there something missing, or something we could have done better?
-				</p>
-				<p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
-					If you have a moment, please share your feedback with us at <a href="mailto:feedback@betterkeep.app" style="color: #6366f1;">feedback@betterkeep.app</a>. It helps us improve <strong>Better Keep Notes</strong> for everyone.
-				</p>
-				<p style="color: #555; font-size: 15px; line-height: 1.6;">
-					If you ever decide to come back, we'll be happy to have you.
-				</p>
-			`;
+				? `Your Better Keep Notes Pro subscription has been cancelled. You will continue to have access to Pro features until ${formatEmailDate(expiresAt)}.`
+				: "Your Better Keep Notes Pro subscription has been cancelled.";
+			feedbackRequested = true;
 			actionText = "Resubscribe";
 			actionUrl = "https://betterkeep.app/subscribe";
 			replyTo = "feedback@betterkeep.app";
 		} else if (notificationType === "EXPIRED") {
 			subject = "Your Better Keep Notes Pro subscription has expired";
-			heading = "Subscription Expired";
+			heading = "Subscription expired";
 			message =
-				"Your <strong>Better Keep Notes Pro</strong> subscription has expired. Resubscribe to regain access to unlimited locked notes, cloud sync, and more.";
+				"Your Better Keep Notes Pro subscription has expired. Resubscribe to regain access to unlimited locked notes, cloud sync, and more.";
 			actionText = "Resubscribe";
 			actionUrl = "https://betterkeep.app/subscribe";
 		} else if (notificationType === "REVOKE") {
 			subject = "Your Better Keep Notes Pro subscription has been revoked";
-			heading = "Subscription Revoked";
+			heading = "Subscription revoked";
 			message =
-				"Your <strong>Better Keep Notes Pro</strong> subscription has been revoked. If you believe this is an error, please contact support.";
+				"Your Better Keep Notes Pro subscription has been revoked. If you believe this is an error, please contact support.";
 			actionText = "Contact Support";
 			actionUrl = "mailto:support@betterkeep.app";
 		} else if (
@@ -542,9 +555,9 @@ async function sendAppStoreNotificationEmail(
 			subtype === "GRACE_PERIOD"
 		) {
 			subject = "Payment issue with your Better Keep Notes Pro subscription";
-			heading = "Grace Period Active";
+			heading = "Update your payment method";
 			message =
-				"We're having trouble processing your payment for <strong>Better Keep Notes Pro</strong>. You have a few days to update your payment method before losing access to Pro features.";
+				"We're having trouble processing your payment for Better Keep Notes Pro. You have a few days to update your payment method before losing access to Pro features.";
 			actionText = "Update Payment";
 			actionUrl = "https://apps.apple.com/account/subscriptions";
 		} else {
@@ -552,60 +565,29 @@ async function sendAppStoreNotificationEmail(
 			return;
 		}
 
-		const htmlContent = `
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<meta charset="utf-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-			</head>
-			<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
-				<div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-					<div style="text-align: center; margin-bottom: 24px;">
-						<img src="https://betterkeep.app/icons/logo.png" alt="Better Keep Notes" style="width: 64px; height: 64px;">
-					</div>
-					<h1 style="color: #333; font-size: 22px; margin-bottom: 20px;">${heading}</h1>
-					<p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
-						${message}
-					</p>
-					${extraContent}
-					${
-						actionText && actionUrl
-							? `
-					<div style="margin: 24px 0;">
-						<a href="${actionUrl}" style="display: inline-block; background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
-							${actionText}
-						</a>
-					</div>
-					`
-							: ""
-					}
-					<hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-					<p style="color: #999; font-size: 13px;">
-						If you have questions, contact us at <a href="mailto:support@betterkeep.app" style="color: #6366f1;">support@betterkeep.app</a>
-					</p>
-					<p style="color: #999; font-size: 13px; margin-top: 8px;">
-						<strong>Better Keep Notes</strong> by Foxbiz Software Pvt. Ltd.
-					</p>
-				</div>
-			</body>
-			</html>
-		`;
-
 		await sendEmail({
 			from: `"${senderName}" <${senderEmail}>`,
 			replyTo,
 			to: email,
 			subject,
-			html: htmlContent,
-			text: `${heading}\n\n${message.replace(/<[^>]*>/g, "")}${
-				extraContent
-					? "\n\nWe'd love to hear your feedback! Reply to this email or write to feedback@betterkeep.app"
-					: ""
-			}${actionUrl ? `\n\n${actionText}: ${actionUrl}` : ""}`,
+			...generateTransactionalEmail({
+				title: heading,
+				category: "Subscription",
+				paragraphs: [message],
+				notice: feedbackRequested
+					? {
+							title: "What could we do better?",
+							text: "Reply to this email or write to feedback@betterkeep.app.",
+						}
+					: undefined,
+				action:
+					actionText && actionUrl
+						? { label: actionText, url: actionUrl }
+						: undefined,
+			}),
 		});
 
-		console.log(`Sent App Store notification email to ${email}`);
+		console.log("Sent App Store notification email");
 	} catch (error) {
 		console.error(
 			`Failed to send App Store notification email to user ${userId}:`,

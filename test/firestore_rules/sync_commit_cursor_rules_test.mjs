@@ -10,6 +10,7 @@ import {
 import {
   Timestamp,
   doc,
+  deleteDoc,
   documentId,
   getDoc,
   getDocs,
@@ -136,3 +137,48 @@ test("rules reject client-forged commit positions", async () => {
     }),
   );
 });
+
+// The published 1.4.5+97 client (b203912) never reads sync_settings.
+// A server rollout must continue accepting its existing note/label/device
+// protocol, even when a newer device has written a provider preference.
+for (const provider of [null, 'none', 'google_drive']) {
+  test(`1.4.5 built-in protocol remains usable with selection ${provider ?? 'absent'}`, async () => {
+    const pro = ownerFirestore();
+    const free = testEnv.authenticatedContext(ownerId).firestore();
+    const other = testEnv.authenticatedContext('other-owner', proClaims).firestore();
+    if (provider !== null) {
+      await assertSucceeds(setDoc(doc(pro, `users/${ownerId}/sync_settings/firebase`), {
+        provider, enabled: false, firebaseDownloads: false,
+        updatedAt: serverTimestamp(),
+      }));
+    }
+    for (const kind of ['notes', 'labels']) {
+      const path = `users/${ownerId}/${kind}/production-format`;
+      const ref = doc(pro, path);
+      // No sync_meta, connection, protocol version or new download flag.
+      await assertSucceeds(setDoc(ref, {
+        local_id: 97,
+        created_at: '2026-01-01T10:00:00.000',
+        updated_at: '2026-01-01T10:00:00.000',
+        sync_committed_at: serverTimestamp(),
+      }));
+      await assertSucceeds(updateDoc(ref, {
+        updated_at: '2026-01-01T11:00:00.000',
+        sync_committed_at: serverTimestamp(),
+      }));
+      await assertSucceeds(getDoc(doc(free, path)));
+      await assertFails(updateDoc(doc(free, path), { local_id: 98 }));
+      await assertFails(getDoc(doc(other, path)));
+      await assertSucceeds(deleteDoc(ref));
+    }
+    const device = doc(pro, `users/${ownerId}/devices/production-device`);
+    await assertSucceeds(setDoc(device, {
+      name: 'QA legacy device', platform: 'android', public_key: 'public-fixture',
+      status: 'approved', created_at: '2026-01-01T10:00:00.000',
+      wrapped_umk: 'ciphertext-fixture', wrapped_umk_nonce: 'nonce-fixture',
+    }));
+    await assertSucceeds(getDoc(device));
+    await assertSucceeds(updateDoc(device, { last_seen: '2026-01-01T11:00:00.000' }));
+    await assertFails(getDoc(doc(other, device.path)));
+  });
+}

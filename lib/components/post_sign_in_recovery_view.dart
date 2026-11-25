@@ -1,43 +1,37 @@
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:flutter/material.dart';
 
-class PostSignInRecoveryView extends StatelessWidget {
+class PostSignInRecoveryView extends StatefulWidget {
   const PostSignInRecoveryView({
     required this.onRetry,
-    required this.onContinueOffline,
     required this.onSignOut,
     this.message,
-    this.canContinueOffline = true,
+    this.canRetry = true,
+    this.connectionUnavailable = false,
     super.key,
   });
 
   final Future<void> Function() onRetry;
-  final Future<void> Function() onContinueOffline;
   final Future<void> Function() onSignOut;
   final String? message;
-  final bool canContinueOffline;
+  final bool canRetry;
+  final bool connectionUnavailable;
 
-  Future<void> _confirmSignOut(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.logout, color: Colors.orange, size: 32),
-        title: Text(context.l10n.signOut),
-        content: Text(context.l10n.signOutConfirmation),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text(context.l10n.signOut),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await onSignOut();
+  @override
+  State<PostSignInRecoveryView> createState() => _PostSignInRecoveryViewState();
+}
+
+class _PostSignInRecoveryViewState extends State<PostSignInRecoveryView> {
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      await widget.onRetry();
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   @override
@@ -46,42 +40,51 @@ class PostSignInRecoveryView extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          Icons.error_outline,
+          widget.connectionUnavailable
+              ? Icons.wifi_off_rounded
+              : Icons.error_outline,
           size: 64,
-          color: Theme.of(context).colorScheme.error,
+          color: widget.connectionUnavailable
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : Theme.of(context).colorScheme.error,
         ),
         const SizedBox(height: 24),
         Text(
-          context.l10n.somethingWentWrong,
+          widget.connectionUnavailable
+              ? context.l10n.signInConnectionTitle
+              : context.l10n.somethingWentWrong,
           style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Text(
-          message ?? context.l10n.somethingWentWrongTryAgain,
+          widget.message ??
+              (widget.connectionUnavailable
+                  ? context.l10n.signInConnectionMessage
+                  : context.l10n.somethingWentWrongTryAgain),
           style: Theme.of(context).textTheme.bodyLarge
               ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh),
-          label: Text(context.l10n.retry),
-        ),
+        if (widget.canRetry)
+          ElevatedButton.icon(
+            onPressed: _retrying ? null : _retry,
+            icon: _retrying
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            label: Text(context.l10n.retry),
+          ),
         const SizedBox(height: 16),
         TextButton.icon(
-          onPressed: () => _confirmSignOut(context),
+          onPressed: widget.onSignOut,
           icon: const Icon(Icons.logout),
           label: Text(context.l10n.signOut),
         ),
-        const SizedBox(height: 8),
-        if (canContinueOffline)
-          TextButton(
-            onPressed: onContinueOffline,
-            child: Text(context.l10n.continueOffline),
-          ),
       ],
     );
   }

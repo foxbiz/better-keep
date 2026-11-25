@@ -5,6 +5,7 @@ import 'package:better_keep/services/remote_sync_cache_service.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/models/label_sync_track.dart';
@@ -12,6 +13,7 @@ import 'package:better_keep/models/note.dart';
 import 'package:better_keep/models/note_sync_track.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_service.dart';
+import 'package:better_keep/services/external_sync/external_sync_service.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/device_authorization.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
@@ -83,6 +85,37 @@ void main() {
     await AuthService.init(prefs: preferences);
   });
 
+  test('startup does not publish an unchecked legacy avatar path', () async {
+    final prefs = await AppState.prefs;
+    await prefs.setString('user_local_photo', '/missing/profile_account-a.jpg');
+    await AuthService.init(prefs: prefs, deferLocalRestore: true);
+    expect(AuthService.localPhotoPath, isNull);
+
+    final legacyRoot = await Directory.systemTemp.createTemp('legacy-avatar-');
+    addTearDown(() => legacyRoot.delete(recursive: true));
+    final legacy = File('${legacyRoot.path}/profile_account-a.jpg');
+    await legacy.writeAsBytes([1, 2, 3]);
+    await prefs.setString('user_local_photo', legacy.path);
+    await AuthService.init(prefs: prefs, deferLocalRestore: true);
+    await AuthService.ensureProfileImageCached();
+    expect(
+      AuthService.localPhotoPath,
+      isNull,
+      reason: 'An existing legacy file without a photo URL is not adopted',
+    );
+    const url = 'https://example.invalid/legacy-avatar.png';
+    await prefs.setString('user_photoURL', url);
+    await prefs.setString('user_photoURL_downloaded', url);
+    await prefs.setString('user_local_photo', legacy.path);
+    await AuthService.init(prefs: prefs, deferLocalRestore: true);
+    await AuthService.ensureProfileImageCached();
+    expect(
+      AuthService.localPhotoPath,
+      legacy.path,
+      reason: 'Verified legacy caches remain usable without a download',
+    );
+  });
+
   test('database-ready startup permits a later cached auth restore', () async {
     await AuthService.init(
       prefs: await SharedPreferences.getInstance(),
@@ -122,6 +155,55 @@ void main() {
     );
     AuthService.cloudRecovery.state.value = CloudSessionState.ready;
   }
+
+  test(
+    'interrupted first-device collision opens recovery without replacing keys',
+    () async {
+      storage.data.remove('e2ee_device_status');
+      storage.data['e2ee_sign_in_progress'] = 'true';
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      backend.firestore.response = (_, _) async => OfflineSnapshot();
+      backend.firestore.queryResponse = (_, _) async => OfflineQuerySnapshot({
+        'another-device': {'status': 'approved'},
+      });
+      final keys = Map.of(storage.data);
+      await e2ee.initialize();
+      expect(e2ee.status.value, E2EEStatus.needsRecovery);
+      expect(e2ee.localState, LocalEncryptionState.needsRecovery);
+      expect(storage.data, keys);
+      expect(backend.firestore.writes, isEmpty);
+      await e2ee.initialize();
+      expect(e2ee.status.value, E2EEStatus.needsRecovery);
+    },
+  );
+
+  test(
+    'unconfirmed startup is retryable instead of caching unfinished success',
+    () async {
+      storage.data.remove('e2ee_device_status');
+      (backend.auth.currentUser! as OfflineUser).tokenResponse = () async =>
+          OfflineToken();
+      backend.firestore.response = (_, _) async =>
+          OfflineSnapshot(cached: true);
+      await expectLater(
+        e2ee.initialize(),
+        throwsA(isA<CloudVerificationUnavailable>()),
+      );
+      expect(e2ee.status.value, E2EEStatus.error);
+      final reads = backend.firestore.reads.length;
+      backend.firestore.response = (_, _) async => OfflineSnapshot(
+        value: {
+          'status': 'approved',
+          'public_key': storage.data['e2ee_device_public_key'],
+          'created_at': '2026-01-01T00:00:00.000Z',
+        },
+      );
+      await e2ee.initialize();
+      expect(backend.firestore.reads.length, greaterThan(reads));
+      expect(e2ee.isCryptoReady, isTrue);
+    },
+  );
 
   test('unconfirmed registration stays initializing until its server write arrives', () async {
     storage.data.remove('e2ee_device_status');
@@ -174,6 +256,40 @@ void main() {
       expect(storage.data, before);
     },
   );
+
+  test('Retry resumes stopped external provider initialization', () async {
+    final external = ExternalSyncService.instance;
+    await external.stop();
+    expect(await e2ee.preloadCachedStatus(), isTrue);
+    AuthService.postSignInState.value = PostSignInState.recoverableFailure(
+      PostSignInStage.encryptionInitialization,
+      operation: 'restore-local-encryption',
+    );
+    final providerStarted = Completer<void>();
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    void observeProvider() {
+      if (external.initializing && !providerStarted.isCompleted) {
+        providerStarted.complete();
+      }
+    }
+
+    external.addListener(observeProvider);
+    // Fail either path lookup: provider lifecycle, not plugin-call ordering,
+    // establishes whether Retry restarted the stopped engine.
+    messenger.setMockMethodCallHandler(channel, (_) async {
+      throw PlatformException(code: 'fixture_provider_storage_unavailable');
+    });
+    addTearDown(() async {
+      external.removeListener(observeProvider);
+      await external.stop();
+      messenger.setMockMethodCallHandler(channel, null);
+    });
+    await AuthService.retryPostSignInInitialization();
+    await providerStarted.future.timeout(const Duration(seconds: 2));
+    expect(AuthService.postSignInState.value, PostSignInState.ready);
+  });
 
   test(
     'returning startup opens local Home before a forced token refresh fails',
@@ -496,16 +612,16 @@ void main() {
     'failed passphrase recovery preserves the existing keys and identity',
     () async {
       await e2ee.preloadCachedStatus();
-      Map<String, dynamic>? recovery;
-      backend.firestore.write = (path, data) async {
-        if (path.endsWith('/recovery_key')) recovery = Map.of(data);
-      };
       await RecoveryKeyService.instance.createRecoveryKey(
         'synthetic offline recovery phrase',
       );
+      expect(
+        backend.firestore.documents['users/account-a/e2ee/recovery_key'],
+        isNotNull,
+      );
       final before = Map.of(storage.data);
-      backend.firestore.response = (_, _) async =>
-          OfflineSnapshot(value: recovery);
+      backend.firestore.response = (path, _) async =>
+          OfflineSnapshot(value: backend.firestore.documents[path]);
       backend.firestore.write = (_, _) async =>
           throw TimeoutException('Offline during recovery');
       await expectLater(
@@ -566,7 +682,7 @@ void main() {
       storage.data.remove('e2ee_umk_cache');
       final before = Map.of(storage.data);
       expect(await e2ee.preloadCachedStatus(), isFalse);
-      expect(e2ee.localState, LocalEncryptionState.missing);
+      expect(e2ee.localState, LocalEncryptionState.approvedKeyMissing);
       await expectLater(e2ee.initialize(), throwsA(isA<FirebaseException>()));
       expect(storage.data, before);
       expect(backend.firestore.writes, isEmpty);

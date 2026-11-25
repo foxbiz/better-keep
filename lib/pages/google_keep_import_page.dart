@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/services/import/google_keep_import_service.dart';
 import 'package:better_keep/services/import/keep_archive_input.dart';
 import 'package:better_keep/services/import/keep_import_models.dart';
@@ -136,112 +137,114 @@ class _GoogleKeepImportPageState extends State<GoogleKeepImportPage> {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.googleKeepImportTitle)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.lock_outline, color: colorScheme.primary),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          context.l10n.googleKeepImportPrivacyTitle,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(context.l10n.googleKeepImportPrivacyDescription),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.googleKeepImportBeforeStart,
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(context.l10n.googleKeepImportInstructions),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _importing || _choosing ? null : _chooseZip,
-            icon: const Icon(Icons.archive_outlined),
-            label: Text(context.l10n.googleKeepChooseZip),
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: () async {
-              final uri = Uri.parse(
-                'https://support.google.com/accounts/answer/3024190',
-              );
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-            icon: const Icon(Icons.open_in_new),
-            label: Text(context.l10n.googleKeepOpenTakeoutInstructions),
-          ),
-          if (_importing || _progress != null) ...[
-            const SizedBox(height: 24),
+      body: DuoSafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _progressMessage(context),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    Row(
+                      children: [
+                        Icon(Icons.lock_outline, color: colorScheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            context.l10n.googleKeepImportPrivacyTitle,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
-                    LinearProgressIndicator(value: _progress?.fraction),
-                    if (_importing) ...[
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: _cancellationToken?.cancel,
-                        icon: const Icon(Icons.close),
-                        label: Text(context.l10n.googleKeepCancelImport),
-                      ),
-                    ],
+                    Text(context.l10n.googleKeepImportPrivacyDescription),
                   ],
                 ),
               ),
             ),
-          ],
-          if (_error != null) ...[
             const SizedBox(height: 16),
-            Card(
-              color: colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: colorScheme.onErrorContainer),
+            Text(
+              context.l10n.googleKeepImportBeforeStart,
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(context.l10n.googleKeepImportInstructions),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _importing || _choosing ? null : _chooseZip,
+              icon: const Icon(Icons.archive_outlined),
+              label: Text(context.l10n.googleKeepChooseZip),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () async {
+                final uri = Uri.parse(
+                  'https://support.google.com/accounts/answer/3024190',
+                );
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: Text(context.l10n.googleKeepOpenTakeoutInstructions),
+            ),
+            if (_importing || _progress != null) ...[
+              const SizedBox(height: 24),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _progressMessage(context),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(value: _progress?.fraction),
+                      if (_importing) ...[
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: _cancellationToken?.cancel,
+                          icon: const Icon(Icons.close),
+                          label: Text(context.l10n.googleKeepCancelImport),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-          if (_report != null) ...[
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: colorScheme.onErrorContainer),
+                  ),
+                ),
+              ),
+            ],
+            if (_report != null) ...[
+              const SizedBox(height: 24),
+              _ImportSummary(report: _report!, onShare: _shareReport),
+            ],
             const SizedBox(height: 24),
-            _ImportSummary(report: _report!, onShare: _shareReport),
+            Text(
+              context.l10n.googleKeepSafetyLimits,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(context.l10n.googleKeepSafetyDescription),
           ],
-          const SizedBox(height: 24),
-          Text(
-            context.l10n.googleKeepSafetyLimits,
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(context.l10n.googleKeepSafetyDescription),
-        ],
+        ),
       ),
     );
   }

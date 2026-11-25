@@ -1,6 +1,7 @@
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/app_progress.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
+import 'package:intl/intl.dart';
 
 extension AuthProgressLocalizations on AuthProgress {
   String localized(AppLocalizations l10n) => switch (this) {
@@ -15,10 +16,15 @@ extension AuthProgressLocalizations on AuthProgress {
 
 extension AuthFailureLocalizations on AuthFailureKind {
   String localized(AppLocalizations l10n) => switch (this) {
-    AuthFailureKind.accountExists => l10n.emailAlreadyInUse,
+    AuthFailureKind.accountExists => l10n.signInToExistingAccount,
+    AuthFailureKind.differentSignInMethod => l10n.useOriginalSignInMethod,
+    AuthFailureKind.invalidEmail => l10n.pleaseEnterAValidEmail,
     AuthFailureKind.accountNotFound => l10n.accountNotFound,
     AuthFailureKind.invalidCredentials => l10n.invalidCredentials,
+    AuthFailureKind.providerVerification =>
+      l10n.providerSignInVerificationFailed,
     AuthFailureKind.accountDisabled => l10n.accountDisabled,
+    AuthFailureKind.deletionInProgress => l10n.accountDeletionInProgress,
     AuthFailureKind.tooManyRequests => l10n.pleaseWaitBeforeRequesting,
     AuthFailureKind.network => l10n.noInternetConnection,
     AuthFailureKind.cancelled ||
@@ -89,26 +95,85 @@ extension RecoveryProgressLocalizations on RecoveryProgress {
 }
 
 extension SyncProgressLocalizations on SyncProgress {
-  String localized(AppLocalizations l10n) => switch (phase) {
+  String localized(
+    AppLocalizations l10n, {
+    bool cloudUploadsRequirePro = false,
+    bool providerSelectionRequired = false,
+  }) => switch (phase) {
     SyncPhase.idle => '',
     SyncPhase.checkingConnection => l10n.syncCheckingConnection,
     SyncPhase.preparing => l10n.syncPreparing,
     SyncPhase.unavailable => l10n.noConnectionAvailable,
     SyncPhase.waitingForApproval => l10n.waitingForDeviceApproval,
     SyncPhase.signInRequired => l10n.pleaseSignInAgain,
-    SyncPhase.deferred => l10n.syncPaused,
-    SyncPhase.uploadRestricted => l10n.syncUploadRestricted,
+    SyncPhase.storageFull => l10n.externalSyncStorageFull,
+    SyncPhase.localStorageFailure => l10n.externalSyncFailure('localStorage'),
+    SyncPhase.sourceReadFailure => l10n.externalSyncFailure('sourceRead'),
+    SyncPhase.notesNeedAttention => l10n.externalSyncBlocked,
+    SyncPhase.notesNeedUnlock => l10n.syncNotesNeedUnlock,
+    SyncPhase.retryScheduled => l10n.syncRetryScheduled,
+    SyncPhase.providerSetupRequired => l10n.externalSyncSharedSetup,
+    SyncPhase.deferred =>
+      providerSelectionRequired
+          ? l10n.externalSyncDescription
+          : l10n.syncPaused,
+    SyncPhase.uploadRestricted =>
+      cloudUploadsRequirePro
+          ? l10n.syncUpgradeForUploads
+          : l10n.syncUploadRestricted,
     SyncPhase.complete => l10n.syncComplete,
     SyncPhase.failed when failedCount > 0 => l10n.syncFailedCount(failedCount),
     SyncPhase.failed => l10n.syncFailed,
+    SyncPhase.syncing when notes != null => notes!.localized(l10n),
+    SyncPhase.checkingForUpdates || SyncPhase.fetchingUpdates => l10n.syncing,
     SyncPhase.resuming ||
-    SyncPhase.checkingForUpdates ||
     SyncPhase.syncing ||
     SyncPhase.restarting ||
     SyncPhase.savingChanges ||
-    SyncPhase.fetchingUpdates ||
     SyncPhase.uploadingMedia => l10n.syncing,
   };
+}
+
+final _compactSyncCounts = <String, NumberFormat>{};
+final _exactSyncCounts = <String, NumberFormat>{};
+
+/// Keep compact counts unless rounding would falsely display equal progress.
+String syncTransferCountLabel(
+  AppLocalizations l10n,
+  int done,
+  int total, {
+  bool downloading = false,
+}) {
+  final compact = _compactSyncCounts.putIfAbsent(
+    l10n.localeName,
+    () => NumberFormat.compact(locale: l10n.localeName),
+  );
+  var completed = compact.format(done), expected = compact.format(total);
+  if (done != total && completed == expected) {
+    final exact = _exactSyncCounts.putIfAbsent(
+      l10n.localeName,
+      () => NumberFormat.decimalPattern(l10n.localeName),
+    );
+    completed = exact.format(done);
+    expected = exact.format(total);
+  }
+  return downloading
+      ? l10n.syncDownloadingNotesOfTotal(completed, expected)
+      : l10n.syncUploadingNotesOfTotal(completed, expected);
+}
+
+extension NoteTransferLocalizations on NoteTransfer {
+  String localized(AppLocalizations l10n) {
+    if (stage == NoteTransferStage.checking) return l10n.syncCheckingNotes;
+    if (stage == NoteTransferStage.checkingUpdates) return l10n.syncing;
+    if (stage == NoteTransferStage.downloading) {
+      return l10n.syncDownloadingNotes;
+    }
+    final expected = total;
+    return expected == null
+        ? l10n.syncUploadingNotes(done)
+        : syncTransferCountLabel(l10n, done, expected);
+  }
 }
 
 extension ExportPhaseLocalizations on ExportPhase {

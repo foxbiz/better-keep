@@ -131,6 +131,7 @@ test(
 				deletedAccountLinkSessions: 1,
 				deletedOAuthStates: 1,
 				deletedOAuthCompletions: 1,
+				deletedStorageOAuthSessions: 0,
 				deletedUserStorageFiles: 1,
 				deletedShareStorageFiles: 1,
 			});

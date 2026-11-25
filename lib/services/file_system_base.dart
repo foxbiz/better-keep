@@ -9,6 +9,9 @@ abstract class FileSystem {
   Future<Uint8List> readBytes(String path);
   Future<String> readString(String path);
   Future<bool> delete(String path);
+
+  /// Removes the supplied files or subtrees, without following symbolic links.
+  Future<void> deleteTrees(List<String> paths);
   Future<bool> exists(String path);
   Future<List<String>> list([String directory = '/']);
   Future<String> copy(String sourcePath, String targetPath);
@@ -39,4 +42,11 @@ abstract class FileSystem {
 
   /// Check if path is file
   Future<bool> isFile(String path);
+}
+
+/// Optional size lookup that never reads file contents into memory.
+/// Null means missing or unavailable; callers must not fall back to a full read
+/// when using this capability to bound concurrent allocations.
+abstract interface class FileSystemMetadata {
+  Future<int?> metadataLength(String path);
 }

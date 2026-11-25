@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:better_keep/models/sketch.dart';
 import 'package:better_keep/services/sketch_strokes_file_service.dart';
 import 'package:better_keep/utils/encryption.dart';
+import 'package:better_keep/utils/file_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,6 +40,46 @@ void main() {
     expect(sketch.backgroundColor.toARGB32(), Colors.blue.toARGB32());
     expect(sketch.pagePattern, PagePattern.grid);
     expect(sketch.aspectRatio, 2.0);
+  });
+
+  test('hydrates strokes after an iOS app-container move', () async {
+    const previousPath =
+        '/old/Library/Application Support/emulator/sketches/source.json';
+    const currentPath =
+        '/new/Library/Application Support/emulator/sketches/source.json';
+    final sketch = SketchData(strokesFilePath: previousPath);
+    final checkedPaths = <String>[];
+    final readPaths = <String>[];
+    final result = await SketchStrokesFileService.hydrate(
+      sketch,
+      resolvePath: (source) async => FileUtils.rebaseIosPath(
+        source,
+        documentDir: '/new/Library/Application Support/emulator',
+        cacheDir: '/new/Library/Caches/emulator',
+      ),
+      pathExists: (source) async {
+        checkedPaths.add(source);
+        return source == currentPath;
+      },
+      readBytes: (source) async {
+        readPaths.add(source);
+        return Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({
+              'strokes': ['pen:${Colors.white.toARGB32()}:5.0:1,2,0.5;'],
+              'bgColor': Colors.black.toARGB32(),
+            }),
+          ),
+        );
+      },
+    );
+
+    expect(result, SketchStrokesLoadResult.loaded);
+    expect(checkedPaths, [currentPath]);
+    expect(readPaths, [currentPath]);
+    expect(sketch.strokes, hasLength(1));
+    expect(sketch.backgroundColor, Colors.black);
+    expect(sketch.strokesFilePath, previousPath);
   });
 
   test('does not read a file when strokes are already hydrated', () async {

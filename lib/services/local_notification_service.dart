@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:better_keep/config.dart';
+import 'package:better_keep/services/cloud_operation.dart';
 import 'package:better_keep/services/async_initialization_gate.dart';
+import 'package:better_keep/services/async_keyed_serializer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'package:better_keep/services/reminder_notification_registration.dart';
 import 'package:better_keep/services/reminder_notification_plan.dart';
 import 'package:better_keep/services/reminder_occurrence.dart';
@@ -50,6 +54,12 @@ class LocalNotificationService {
   String _reminderChannelName = 'Better Keep';
   String _reminderChannelDescription = 'Better Keep';
   bool _pluginInitialized = false;
+
+  static const _windowsSettings = WindowsInitializationSettings(
+    appName: appLabel,
+    appUserModelId: 'FoxbizSotware.BetterKeepNotes',
+    guid: '886c9a5b-2d6e-4ae6-822d-de6c845ecd7d',
+  );
 
   bool get supportsScheduling {
     if (kIsWeb) return false;
@@ -127,11 +137,7 @@ class LocalNotificationService {
         requestSoundPermission: false,
         notificationCategories: categories,
       ),
-      windows: const WindowsInitializationSettings(
-        appName: appLabel,
-        appUserModelId: 'FoxbizSotware.BetterKeepNotes',
-        guid: '886c9a5b-2d6e-4ae6-822d-de6c845ecd7d',
-      ),
+      windows: _windowsSettings,
     );
 
     await _plugin.initialize(
@@ -280,13 +286,12 @@ class LocalNotificationService {
     return true;
   }
 
-  Future<void> scheduleReminder({
-    required int noteId,
-    required int occurrenceIndex,
+  Future<void> _scheduleReminder({
     required DateTime dateTime,
     required String title,
     required String body,
     required String payload,
+    required int notificationId,
     DateTimeComponents? matchDateTimeComponents,
   }) async {
     final location = _timeZoneLocation;
@@ -349,13 +354,17 @@ class LocalNotificationService {
       windows: windowsDetails,
     );
 
-    final notificationId = reminderNotificationId(noteId, occurrenceIndex);
     await AppLogger.log(
       'Scheduling reminder notification: id=$notificationId, '
       'local=${scheduledDate.toIso8601String()}, zone=${location.name}, '
       'utc=${scheduledDate.toUtc().toIso8601String()}',
     );
 
+    final prefs = await SharedPreferences.getInstance();
+    final reminderPayload = decodeReminderNotificationPayload(payload)!;
+    if (!_acceptsGeneration(prefs, reminderPayload)) {
+      return;
+    }
     await _plugin.zonedSchedule(
       id: notificationId,
       title: title,
@@ -368,6 +377,10 @@ class LocalNotificationService {
     );
 
     final pending = await _plugin.pendingNotificationRequests();
+    if (!_acceptsGeneration(prefs, reminderPayload)) {
+      await dismissRetiredReminder(notificationId, reminderPayload);
+      return;
+    }
     final registered = containsPendingReminderRegistration(
       requests: pending,
       notificationId: notificationId,
@@ -392,14 +405,17 @@ class LocalNotificationService {
 
   Future<void> applyReminderPlan(
     Iterable<PlannedReminderNotification> notifications, {
+    required String? deliveryGeneration,
     bool forceRecreate = false,
   }) async {
     if (!supportsScheduling) return;
+    final prefs = await SharedPreferences.getInstance();
     final desired = <int, PlannedReminderNotification>{};
     for (final notification in notifications) {
       desired[reminderNotificationId(
             notification.noteId,
             notification.occurrenceIndex,
+            deliveryGeneration,
           )] =
           notification;
     }
@@ -418,6 +434,7 @@ class LocalNotificationService {
               planned.noteId,
               planned.reminder,
               planned.dueAt,
+              deliveryGeneration: deliveryGeneration,
             );
       final unchanged =
           !forceRecreate &&
@@ -425,15 +442,18 @@ class LocalNotificationService {
           entry.value.payload == payload &&
           entry.value.title == planned.title &&
           entry.value.body == planned.body;
+      if (prefs.getString(_deliveryKey) != deliveryGeneration) return;
       if (!unchanged) await _plugin.cancel(id: entry.key);
     }
 
     for (final entry in desired.entries) {
+      if (prefs.getString(_deliveryKey) != deliveryGeneration) return;
       final planned = entry.value;
       final payload = encodeReminderNotificationPayload(
         planned.noteId,
         planned.reminder,
         planned.dueAt,
+        deliveryGeneration: deliveryGeneration,
       );
       final existing = current[entry.key];
       final unchanged =
@@ -442,9 +462,8 @@ class LocalNotificationService {
           existing?.title == planned.title &&
           existing?.body == planned.body;
       if (unchanged) continue;
-      await scheduleReminder(
-        noteId: planned.noteId,
-        occurrenceIndex: planned.occurrenceIndex,
+      await _scheduleReminder(
+        notificationId: entry.key,
         dateTime: planned.dueAt,
         title: planned.title,
         body: planned.body,
@@ -460,8 +479,13 @@ class LocalNotificationService {
 
   Future<void> cancelReminder(int noteId) async {
     if (!supportsScheduling) return;
+    final prefs = await SharedPreferences.getInstance();
+    final generation = prefs.getString(_deliveryKey);
     for (var index = 0; index < _maxOccurrenceSlots; index++) {
-      await _plugin.cancel(id: reminderNotificationId(noteId, index));
+      if (generation != prefs.getString(_deliveryKey)) return;
+      await _plugin.cancel(
+        id: reminderNotificationId(noteId, index, generation),
+      );
     }
     // Remove the ongoing notification created by releases before reminder
     // types existed. This is intentionally scoped to the legacy ID formula.
@@ -500,6 +524,150 @@ class LocalNotificationService {
     return ids.length;
   }
 
+  // Device-wide: the OS notification queue is shared by every local account.
+  static const _deliveryKey = 'notification_delivery_generation';
+  static const _pending = 'pending:';
+  static const _scopedIds = 'v2:';
+  final _cleanup = AsyncKeyedSerializer<String>();
+  final _lateCancellation = ValueNotifier<int>(0);
+  Listenable get lateCancellation => _lateCancellation;
+
+  Future<void> retireDeliveries() async {
+    if (!supportsScheduling) return;
+    await _cleanup.run(_deliveryKey, () async {
+      final prefs = await SharedPreferences.getInstance();
+      final generation = '$_scopedIds${const Uuid().v4()}';
+      if (!await prefs.setString(_deliveryKey, '$_pending$generation')) {
+        throw StateError('Could not retire reminder deliveries');
+      }
+      try {
+        await cancelForSignOut();
+      } catch (error, stack) {
+        unawaited(
+          AppLogger.error(
+            'Could not confirm notification cancellation',
+            error,
+            stack,
+          ),
+        );
+      }
+      await _finishCleanup(prefs, generation);
+    });
+  }
+
+  Future<void> _finishCleanup(
+    SharedPreferences prefs,
+    String generation,
+  ) async {
+    if (!await prefs.setString(_deliveryKey, generation)) {
+      throw StateError('Could not complete reminder cleanup');
+    }
+  }
+
+  Future<String?> prepareDeliveries() => _cleanup.run(_deliveryKey, () async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_deliveryKey);
+    if (value == null || !value.startsWith(_pending)) return value;
+    final generation = value.substring(_pending.length);
+    // Resume an interrupted retirement without issuing a bulk cancel in a new session.
+    await _finishCleanup(prefs, generation);
+    return generation;
+  });
+
+  bool _acceptsGeneration(
+    SharedPreferences prefs,
+    Map<String, dynamic>? payload,
+  ) {
+    final current = prefs.getString(_deliveryKey);
+    return !(current?.startsWith(_pending) ?? false) &&
+        payload?['deliveryGeneration'] == current;
+  }
+
+  Future<bool> acceptsReminder(
+    Map<String, dynamic> payload, {
+    bool background = false,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (background) await prefs.reload();
+    return _acceptsGeneration(prefs, payload);
+  }
+
+  Future<void> dismissRetiredReminder(
+    int? id,
+    Map<String, dynamic> payload,
+  ) async {
+    final noteId = payload['noteId'];
+    final generation = payload['deliveryGeneration'];
+    if (payload['kind'] != 'reminder') return;
+    if (id == null ||
+        noteId is! int ||
+        (generation != null && generation is! String)) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getString(_deliveryKey);
+    if (current == null || current == generation) return;
+    final next = current.startsWith(_pending)
+        ? current.substring(_pending.length)
+        : current;
+    var owned = false;
+    for (var index = 0; index < _maxOccurrenceSlots; index++) {
+      if (id == reminderNotificationId(noteId, index, next)) return;
+      if (id == reminderNotificationId(noteId, index, generation as String?)) {
+        owned = true;
+      }
+    }
+    if (!owned) return;
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      for (final request in pending.where((entry) => entry.id == id)) {
+        final data = decodeReminderNotificationPayload(request.payload);
+        if (data?['kind'] != 'reminder' ||
+            data?['noteId'] != noteId ||
+            data?['deliveryGeneration'] != generation) {
+          return;
+        }
+      }
+      await _plugin.cancel(id: id);
+    } catch (error) {
+      await AppLogger.log(
+        'Could not dismiss retired reminder: ${error.runtimeType}',
+      );
+    }
+  }
+
+  /// All deliveries belong to the departing account. Issue one native command
+  /// before allowing a new account to schedule anything on this device.
+  Future<void> cancelForSignOut() async {
+    if (!supportsScheduling) return;
+    const timeout = Duration(seconds: 10);
+    if (isWindows && !_pluginInitialized) {
+      // Interrupted sign-out can resume before optional reminder startup.
+      await _plugin
+          .initialize(
+            settings: const InitializationSettings(windows: _windowsSettings),
+            onDidReceiveNotificationResponse: _dispatchResponse,
+          )
+          .timeout(timeout);
+    }
+    var timedOut = false;
+    await _plugin
+        .cancelAll()
+        .then((_) {
+          if (timedOut) _lateCancellation.value++;
+        })
+        .timeout(
+          timeout,
+          onTimeout: () {
+            timedOut = true;
+            throw TimeoutException(
+              'Notification cancellation timed out',
+              timeout,
+            );
+          },
+        );
+  }
+
   Future<bool> showDeviceApproval({
     required int id,
     required String title,
@@ -523,6 +691,8 @@ class LocalNotificationService {
       macOS: DarwinNotificationDetails(),
       windows: WindowsNotificationDetails(),
     );
+    await prepareDeliveries();
+    requireCloudOperation();
     await _plugin.show(
       id: id,
       title: title,
@@ -546,11 +716,19 @@ class LocalNotificationService {
     await _plugin.cancel(id: id);
   }
 
-  int reminderNotificationId(int noteId, [int occurrenceIndex = 0]) {
+  int reminderNotificationId(
+    int noteId, [
+    int occurrenceIndex = 0,
+    String? generation,
+  ]) {
     // Stable 31-bit FNV-1a keeps IDs deterministic across restarts without
     // relying on Dart hashCode randomisation.
     var hash = 0x811c9dc5;
-    for (final unit in 'reminder:$noteId:$occurrenceIndex'.codeUnits) {
+    // Existing schedules retain their original IDs until the account changes.
+    final prefix = generation != null && generation.startsWith(_scopedIds)
+        ? 'reminder:$generation'
+        : 'reminder';
+    for (final unit in '$prefix:$noteId:$occurrenceIndex'.codeUnits) {
       hash ^= unit;
       hash = (hash * 0x01000193) & 0x7fffffff;
     }

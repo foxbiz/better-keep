@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { configureNativeAppAction } from '../src/lib/native-app-action.ts';
+import { configureNativeAppAction, isDesktopBrowser } from '../src/lib/native-app-action.ts';
 
 const playStoreUrl = 'https://play.google.com/store/apps/details?id=io.foxbiz.better_keep&utm_source=betterkeep.app';
 
@@ -63,4 +63,13 @@ test('desktop and unknown browsers keep the web action even at mobile widths', (
 
 test('pages without a floating action remain safe to initialize', () => {
   configureNativeAppAction(null, { userAgent: '', platform: '', maxTouchPoints: 0 });
+});
+
+test('pricing uses device signals, including desktop-mode iPads and touch PCs', () => {
+  const mac = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)', platform: 'MacIntel', maxTouchPoints: 0 };
+  assert.equal(isDesktopBrowser(mac), true);
+  assert.equal(isDesktopBrowser({ ...mac, maxTouchPoints: 5 }), false);
+  assert.equal(isDesktopBrowser({ userAgent: 'Windows NT 10.0', platform: 'Win32', maxTouchPoints: 10 }), true);
+  assert.equal(isDesktopBrowser({ userAgent: 'Linux; Android 15', platform: 'Linux', maxTouchPoints: 5 }), false);
+  assert.equal(isDesktopBrowser({ userAgent: 'X11; Linux', platform: 'Linux', maxTouchPoints: 5, userAgentData: { mobile: true } }), false);
 });

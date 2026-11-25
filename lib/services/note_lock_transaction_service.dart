@@ -1157,7 +1157,10 @@ class NoteFileReferenceService {
 
   /// Returns every local attachment path still referenced by SQLite.
   /// Callers must fail closed when this query cannot be completed.
-  static Future<Set<String>> databaseReferencedLocalPaths(Database db) async {
+  static Future<Set<String>> databaseReferencedLocalPaths(
+    Database db, {
+    bool includeSyncTracks = true,
+  }) async {
     final referenced = <String>{};
     final noteRows = await db.query('note', columns: ['attachments']);
     for (final row in noteRows) {
@@ -1169,6 +1172,7 @@ class NoteFileReferenceService {
         ),
       );
     }
+    if (!includeSyncTracks) return referenced;
     final fileRows = await db.query('file_sync_track', columns: ['local_path']);
     referenced.addAll(
       fileRows.map((row) => row['local_path'] as String?).whereType<String>(),
@@ -1270,6 +1274,9 @@ class NoteLockRecoveryService {
     var decoded = serialized;
     if (LocalDataEncryption.isEncrypted(decoded)) {
       decoded = await LocalDataEncryption.instance.decryptString(decoded);
+      if (strict && decoded.isEmpty) {
+        throw const FormatException('Unable to decrypt attachment references');
+      }
     }
     if (decoded.isEmpty) return const {};
 

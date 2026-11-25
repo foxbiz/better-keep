@@ -25,6 +25,10 @@
 			"ignore": ["firebase.deploy.json", "**/.*", "**/node_modules/**"],
 			"headers": [
 				{
+					"source": "/app{,/**}/offline_worker.js",
+					"headers": [{ "key": "Service-Worker-Allowed", "value": "/app" }]
+				},
+				{
 					"source": "**",
 					"headers": [
 						{
@@ -47,6 +51,14 @@
 							"key": "Cache-Control",
 							"value": "no-cache, max-age=0, must-revalidate"
 						}
+					]
+				},
+				{
+					"source": "/{oauth/storage/callback,app/storage-auth.html,storage-auth.html}",
+					"headers": [
+						{ "key": "Content-Security-Policy", "value": "default-src 'none'; script-src 'sha256-qjA8srQNBiULJdOz40QNgnSwO5DVxdaIifYeYadJDkM='; style-src 'unsafe-inline'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'" },
+						{ "key": "Cache-Control", "value": "no-store" },
+						{ "key": "Referrer-Policy", "value": "no-referrer" }
 					]
 				},
 				{
@@ -173,6 +185,14 @@
 				}
 			],
 			"rewrites": [
+				{
+					"source": "/oauth/storage/start",
+					"function": "storageOAuthStart"
+				},
+				{
+					"source": "/oauth/storage/callback",
+					"destination": "/app/storage-auth.html"
+				},
 				{
 					"source": "/oauth/start",
 					"function": "oauthStart"

@@ -413,6 +413,20 @@ class NoteReorderController {
   }
 }
 
+Rect masonryCacheBounds(SliverConstraints constraints) {
+  final top = constraints.scrollOffset + constraints.cacheOrigin;
+  if (constraints.remainingCacheExtent <= 0) {
+    return Rect.fromLTWH(0, top, constraints.crossAxisExtent, 0);
+  }
+  const step = 256.0;
+  return Rect.fromLTRB(
+    0,
+    (top / step).floor() * step,
+    constraints.crossAxisExtent,
+    ((top + constraints.remainingCacheExtent) / step).ceil() * step,
+  );
+}
+
 class AnimatedMasonryReorderLayout extends StatefulWidget {
   const AnimatedMasonryReorderLayout({
     super.key,
@@ -421,6 +435,7 @@ class AnimatedMasonryReorderLayout extends StatefulWidget {
     required this.mainAxisSpacing,
     required this.crossAxisSpacing,
     required this.children,
+    this.cacheBounds,
     this.activeId,
     this.dragGlobalPosition,
     this.dragAnchor = Offset.zero,
@@ -434,6 +449,9 @@ class AnimatedMasonryReorderLayout extends StatefulWidget {
   final double mainAxisSpacing;
   final double crossAxisSpacing;
   final List<Widget> children;
+
+  /// Section-local viewport plus scroll cache. Null keeps eager layout.
+  final Rect? cacheBounds;
   final int? activeId;
   final Offset? dragGlobalPosition;
   final Offset dragAnchor;
@@ -452,11 +470,14 @@ class _AnimatedMasonryReorderLayoutState
   @override
   Widget build(BuildContext context) {
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
-    final duration = disableAnimations
+    final duration =
+        disableAnimations ||
+            (widget.cacheBounds != null && widget.activeId == null)
         ? Duration.zero
         : widget.animationDuration;
     final layout = _AnimatedMasonryRenderWidget(
       controller: widget.controller,
+      cacheBounds: widget.cacheBounds,
       vsync: this,
       crossAxisCount: widget.crossAxisCount,
       mainAxisSpacing: widget.mainAxisSpacing,
@@ -470,7 +491,7 @@ class _AnimatedMasonryReorderLayoutState
       animationCurve: widget.animationCurve,
       children: widget.children,
     );
-    if (disableAnimations) return layout;
+    if (disableAnimations || widget.cacheBounds != null) return layout;
     return AnimatedSize(
       duration: duration,
       curve: widget.animationCurve,
@@ -482,6 +503,24 @@ class _AnimatedMasonryReorderLayoutState
 
 class MasonryReorderItem extends ParentDataWidget<_MasonryParentData> {
   const MasonryReorderItem({super.key, required this.id, required super.child});
+
+  /// Keep only a lightweight placeholder outside the viewport. The render
+  /// layout remembers measured heights, including while a card is unmounted.
+  MasonryReorderItem.lazy({
+    super.key,
+    required this.id,
+    required WidgetBuilder builder,
+  }) : super(
+         child: LayoutBuilder(
+           builder: (context, constraints) {
+             if (constraints is _MasonryChildConstraints &&
+                 !constraints.visible) {
+               return SizedBox(height: constraints.placeholderHeight);
+             }
+             return builder(context);
+           },
+         ),
+       );
 
   final int id;
 
@@ -501,6 +540,7 @@ class MasonryReorderItem extends ParentDataWidget<_MasonryParentData> {
 class _AnimatedMasonryRenderWidget extends MultiChildRenderObjectWidget {
   const _AnimatedMasonryRenderWidget({
     required this.controller,
+    required this.cacheBounds,
     required this.vsync,
     required this.crossAxisCount,
     required this.mainAxisSpacing,
@@ -516,6 +556,7 @@ class _AnimatedMasonryRenderWidget extends MultiChildRenderObjectWidget {
   });
 
   final MasonryLayoutController controller;
+  final Rect? cacheBounds;
   final TickerProvider vsync;
   final int crossAxisCount;
   final double mainAxisSpacing;
@@ -532,6 +573,7 @@ class _AnimatedMasonryRenderWidget extends MultiChildRenderObjectWidget {
   _RenderAnimatedMasonryLayout createRenderObject(BuildContext context) {
     return _RenderAnimatedMasonryLayout(
       controller: controller,
+      cacheBounds: cacheBounds,
       vsync: vsync,
       crossAxisCount: crossAxisCount,
       mainAxisSpacing: mainAxisSpacing,
@@ -553,6 +595,7 @@ class _AnimatedMasonryRenderWidget extends MultiChildRenderObjectWidget {
   ) {
     renderObject
       ..layoutController = controller
+      ..cacheBounds = cacheBounds
       ..vsync = vsync
       ..crossAxisCount = crossAxisCount
       ..mainAxisSpacing = mainAxisSpacing
@@ -567,11 +610,37 @@ class _AnimatedMasonryRenderWidget extends MultiChildRenderObjectWidget {
   }
 }
 
+/// Visibility is part of the constraints so LayoutBuilder rebuilds only when
+/// a card enters/leaves the cache, not for every scroll pixel.
+class _MasonryChildConstraints extends BoxConstraints {
+  const _MasonryChildConstraints({
+    required double width,
+    required this.visible,
+    required this.placeholderHeight,
+  }) : super(minWidth: width, maxWidth: width);
+
+  final bool visible;
+  final double placeholderHeight;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _MasonryChildConstraints &&
+      super == other &&
+      visible == other.visible &&
+      placeholderHeight == other.placeholderHeight;
+
+  @override
+  int get hashCode => Object.hash(super.hashCode, visible, placeholderHeight);
+}
+
 class _MasonryParentData extends ContainerBoxParentData<RenderBox> {
   int? id;
   Offset fromOffset = Offset.zero;
   Offset targetOffset = Offset.zero;
   bool hasPosition = false;
+  bool visible = true;
+  double? measuredHeight;
+  double? measuredWidth;
 }
 
 class _RenderAnimatedMasonryLayout extends RenderBox
@@ -580,6 +649,7 @@ class _RenderAnimatedMasonryLayout extends RenderBox
         RenderBoxContainerDefaultsMixin<RenderBox, _MasonryParentData> {
   _RenderAnimatedMasonryLayout({
     required MasonryLayoutController controller,
+    required this._cacheBounds,
     required TickerProvider vsync,
     required this._crossAxisCount,
     required this._mainAxisSpacing,
@@ -600,6 +670,14 @@ class _RenderAnimatedMasonryLayout extends RenderBox
       value: 1,
     )..addListener(_handleAnimationTick);
     _layoutController._attach(this);
+  }
+
+  Rect? _cacheBounds;
+
+  set cacheBounds(Rect? value) {
+    if (value == _cacheBounds) return;
+    _cacheBounds = value;
+    markNeedsLayout();
   }
 
   late final AnimationController _positionController;
@@ -759,13 +837,37 @@ class _RenderAnimatedMasonryLayout extends RenderBox
     final items = <MasonryLayoutItem>[];
     final children = <RenderBox>[];
 
+    final columnExtents = List<double>.filled(columnCount, 0);
     RenderBox? child = firstChild;
     while (child != null) {
+      final parentData = child.parentData! as _MasonryParentData;
+      if (parentData.measuredWidth != itemWidth) {
+        parentData.measuredHeight = null;
+        parentData.measuredWidth = itemWidth;
+      }
+      final column = MasonryLayoutEngine._shortestColumn(columnExtents);
+      final top = columnExtents[column];
+      final height = parentData.measuredHeight ?? 220;
+      final cache = _cacheBounds;
+      final visible =
+          cache == null ||
+          parentData.id == _activeId ||
+          (!cache.isEmpty && top <= cache.bottom && top + height >= cache.top);
+      parentData.visible = visible;
       child.layout(
-        BoxConstraints.tightFor(width: itemWidth),
+        cache == null
+            ? BoxConstraints.tightFor(width: itemWidth)
+            : _MasonryChildConstraints(
+                width: itemWidth,
+                visible: visible,
+                // Irrelevant while visible; keep constraints stable after
+                // measuring so scrolling does not rebuild an unchanged card.
+                placeholderHeight: visible ? 0 : height,
+              ),
         parentUsesSize: true,
       );
-      final parentData = child.parentData! as _MasonryParentData;
+      if (visible) parentData.measuredHeight = child.size.height;
+      columnExtents[column] = top + child.size.height + _mainAxisSpacing;
       final id = parentData.id;
       if (id != null) {
         items.add(MasonryLayoutItem(id: id, height: child.size.height));
@@ -866,7 +968,7 @@ class _RenderAnimatedMasonryLayout extends RenderBox
     RenderBox? child = firstChild;
     while (child != null) {
       final parentData = child.parentData! as _MasonryParentData;
-      if (!identical(child, activeChild)) {
+      if (parentData.visible && !identical(child, activeChild)) {
         context.paintChild(child, offset + _paintOffsetFor(child));
       }
       child = parentData.nextSibling;
@@ -899,7 +1001,8 @@ class _RenderAnimatedMasonryLayout extends RenderBox
     RenderBox? child = lastChild;
     while (child != null) {
       final parentData = child.parentData! as _MasonryParentData;
-      if (!identical(child, activeChild) &&
+      if (parentData.visible &&
+          !identical(child, activeChild) &&
           _hitTestChild(result, child, position)) {
         return true;
       }

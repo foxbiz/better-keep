@@ -1,4 +1,4 @@
-type UserMetricResult = { status: 'loading' | 'unavailable'; metric: null } | { status: 'ready'; metric: string };
+type UserMetricResult = { status: 'unavailable'; metric: null } | { status: 'ready'; metric: string };
 type MetricResponse = { ok: boolean; status?: number; json?: () => Promise<unknown> };
 type MetricFetcher = (endpoint: string, options: { headers: { Accept: string }; signal: AbortSignal }) => Promise<MetricResponse>;
 type MetricOptions = {
@@ -10,21 +10,9 @@ type MetricOptions = {
   AbortControllerClass?: typeof AbortController;
 };
 
-export const USER_COUNT_LOADING_STATE = Object.freeze({
-  status: 'loading' as const,
-  metric: null
-});
-
 export const USER_COUNT_UNAVAILABLE_STATE = Object.freeze({
   status: 'unavailable' as const,
   metric: null
-});
-
-const USER_COUNT_UNAVAILABLE_PRESENTATION = Object.freeze({
-  state: 'unavailable' as const,
-  metric: null,
-  label: 'Growing community',
-  announcement: 'Better Keep has a growing community'
 });
 
 const compactMetricPattern = /^\d+(?:\.\d)?[KM]\+$/;
@@ -56,19 +44,6 @@ export function resolvePublicUserMetric(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
   const record = payload as Record<string, unknown>;
   return compactUserCount(record.metric) || compactUserCount(record.message);
-}
-
-export function createUserCountPresentation(result: UserMetricResult | null | undefined) {
-  const metric =
-    result?.status === 'ready' ? compactUserCount(result.metric) : null;
-  if (!metric) return USER_COUNT_UNAVAILABLE_PRESENTATION;
-
-  return {
-    state: 'ready',
-    metric,
-    label: 'People have joined',
-    announcement: `${metric} people have joined Better Keep`
-  };
 }
 
 async function loadPublicUserMetricAttempt({

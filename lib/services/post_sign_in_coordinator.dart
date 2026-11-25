@@ -19,6 +19,8 @@ class PostSignInState {
     required this.status,
     required this.stage,
     this.failedOperation,
+    this.accountDeletionInProgress = false,
+    this.connectionUnavailable = false,
   });
 
   static const idle = PostSignInState._(
@@ -37,10 +39,14 @@ class PostSignInState {
   factory PostSignInState.recoverableFailure(
     PostSignInStage stage, {
     required String operation,
+    bool accountDeletionInProgress = false,
+    bool connectionUnavailable = false,
   }) => PostSignInState._(
     status: PostSignInStatus.recoverableFailure,
     stage: stage,
     failedOperation: operation,
+    accountDeletionInProgress: accountDeletionInProgress,
+    connectionUnavailable: connectionUnavailable,
   );
 
   final PostSignInStatus status;
@@ -49,6 +55,8 @@ class PostSignInState {
   /// Stable diagnostic label only. User-visible and sensitive error details do
   /// not flow through presentation state.
   final String? failedOperation;
+  final bool accountDeletionInProgress;
+  final bool connectionUnavailable;
 
   bool get isRunning => status == PostSignInStatus.running;
   bool get hasRecoverableFailure =>
@@ -59,10 +67,18 @@ class PostSignInState {
       other is PostSignInState &&
       other.status == status &&
       other.stage == stage &&
-      other.failedOperation == failedOperation;
+      other.failedOperation == failedOperation &&
+      other.accountDeletionInProgress == accountDeletionInProgress &&
+      other.connectionUnavailable == connectionUnavailable;
 
   @override
-  int get hashCode => Object.hash(status, stage, failedOperation);
+  int get hashCode => Object.hash(
+    status,
+    stage,
+    failedOperation,
+    accountDeletionInProgress,
+    connectionUnavailable,
+  );
 }
 
 enum PostSignInResult { ready, recoverableFailure, sessionChanged }
@@ -95,6 +111,8 @@ class PostSignInCoordinator {
     required this.clearSignInProgress,
     required this.onStateChanged,
     required this.reportFailure,
+    this.isAccountDeletionInProgress,
+    this.isConnectionFailure,
   });
 
   final PostSignInOperation validateIdentity;
@@ -107,6 +125,8 @@ class PostSignInCoordinator {
   final Future<void> Function() clearSignInProgress;
   final ValueChanged<PostSignInState> onStateChanged;
   final PostSignInFailureReporter reportFailure;
+  final bool Function(Object error)? isAccountDeletionInProgress;
+  final bool Function(Object error)? isConnectionFailure;
 
   Future<PostSignInResult> run() async {
     final identityResult = await _runRequiredOperation(
@@ -188,7 +208,13 @@ class PostSignInCoordinator {
       }
 
       onStateChanged(
-        PostSignInState.recoverableFailure(stage, operation: operation.name),
+        PostSignInState.recoverableFailure(
+          stage,
+          operation: operation.name,
+          connectionUnavailable: isConnectionFailure?.call(error) ?? false,
+          accountDeletionInProgress:
+              isAccountDeletionInProgress?.call(error) ?? false,
+        ),
       );
       return PostSignInResult.recoverableFailure;
     }

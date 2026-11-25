@@ -1,3 +1,4 @@
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/models/label.dart';
 import 'package:better_keep/pages/note_editor/embeds/note_table_embed.dart';
 import 'package:better_keep/services/markdown_import_service.dart';
@@ -119,7 +120,9 @@ class _ContentPreviewPageState extends State<ContentPreviewPage> {
             ),
         ],
       ),
-      body: _buildQuillPreview(theme, foregroundColor, backgroundColor),
+      body: DuoSafeArea(
+        child: _buildQuillPreview(theme, foregroundColor, backgroundColor),
+      ),
     );
   }
 

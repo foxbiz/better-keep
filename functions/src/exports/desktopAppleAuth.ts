@@ -10,13 +10,13 @@ import {
 	createOpaqueToken,
 	isClientTransactionId,
 	isOpaqueToken,
+	OAUTH_STATE_AUDIENCE,
+	OAUTH_STATE_TTL_MS,
+	type OAuthState,
 	oauthCookieHeader,
 	openOAuthState,
 	readOAuthBrowserNonce,
 	sealOAuthState,
-	OAUTH_STATE_AUDIENCE,
-	OAUTH_STATE_TTL_MS,
-	type OAuthState,
 } from "../oauthSession";
 import { isProtectedReviewUserRecord } from "../reviewAccess";
 
@@ -96,14 +96,18 @@ export default onRequest(
 				readOAuthBrowserNonce(req.get("cookie")),
 				token,
 			);
+			const { completionChallenge, clientTransactionId } = state;
+			if (!completionChallenge || !clientTransactionId) {
+				throw new Error("Invalid Apple sign-in completion");
+			}
 			if (isProtectedReviewUserRecord(await auth.getUser(token.uid))) {
 				throw new Error("Apple sign-in is unavailable for this account");
 			}
 			const code = await createOAuthCompletion({
 				uid: token.uid,
 				provider: "apple",
-				challenge: state.completionChallenge!,
-				clientTransactionId: state.clientTransactionId!,
+				challenge: completionChallenge,
+				clientTransactionId,
 			});
 			res.set("Set-Cookie", clearOAuthCookieHeader());
 			res.status(200).json({ code });

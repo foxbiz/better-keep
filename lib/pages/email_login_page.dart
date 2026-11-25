@@ -4,6 +4,7 @@ import 'package:better_keep/pages/password_reset_page.dart';
 import 'package:better_keep/services/auth_error_messages.dart';
 import 'package:better_keep/services/auth_service.dart';
 import 'package:better_keep/state.dart';
+import 'package:better_keep/utils/email_address.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
 import 'package:better_keep/utils/logger.dart';
 import 'package:better_keep/utils/progress_localizations.dart';
@@ -64,11 +65,10 @@ class _EmailLoginPageState extends State<EmailLoginPage>
   }
 
   String? _validateEmail(String? value) {
-    if (value == null || value.isEmpty) {
+    if (value == null || value.trim().isEmpty) {
       return context.l10n.pleaseEnterYourEmail;
     }
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value)) {
+    if (!isValidEmailAddress(value.trim())) {
       return context.l10n.pleaseEnterAValidEmail;
     }
     return null;

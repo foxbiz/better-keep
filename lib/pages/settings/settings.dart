@@ -1,8 +1,10 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:better_keep/components/duo_safe_area.dart';
 import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/pages/about_page.dart';
 import 'package:better_keep/pages/help_page.dart';
 import 'package:better_keep/pages/settings/nerd_stats_page.dart';
+import 'package:better_keep/pages/settings/storage_sync_page.dart';
 import 'package:better_keep/services/firebase_emulator_config.dart';
 import 'package:better_keep/services/local_data_encryption.dart';
 import 'package:better_keep/services/whisper/whisper.dart';
@@ -14,6 +16,9 @@ import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/foundation.dart'
     show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+
+import '../../components/sync_provider_tile.dart';
+
 import 'package:path/path.dart' as path;
 
 class Settings extends StatefulWidget {
@@ -264,257 +269,272 @@ class _SettingsState extends State<Settings> {
 
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.settings)),
-      body: ListView(
-        padding: EdgeInsets.only(
-          top: 16,
-          bottom: MediaQuery.paddingOf(context).bottom,
-        ),
-        children: [
-          _SettingsSection(
-            title: context.l10n.settingsAppearanceLanguage,
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.brightness_auto),
-                title: Text(context.l10n.followSystemTheme),
-                subtitle: Text(context.l10n.autoSwitchLightDark),
-                value: _followSystemTheme,
-                onChanged: (value) {
-                  AppState.followSystemTheme = value;
-                },
-              ),
-              // Dark mode toggle - disabled when following system theme
-              SwitchListTile(
-                secondary: Icon(
-                  isDarkMode ? Icons.dark_mode : Icons.light_mode,
-                ),
-                title: Text(context.l10n.darkMode),
-                value: isDarkMode,
-                onChanged: _followSystemTheme
-                    ? null
-                    : (value) {
-                        if (value) {
-                          AppState.themeId = _darkThemeId;
-                        } else {
-                          AppState.themeId = _lightThemeId;
-                        }
-                      },
-              ),
-              // Theme selector - disabled when following system theme
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: Text(
-                  isDarkMode ? context.l10n.darkTheme : context.l10n.lightTheme,
-                ),
-                subtitle: Text(
-                  ThemeRegistry.getThemeName(
-                    isDarkMode ? _darkThemeId : _lightThemeId,
-                  ),
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                enabled: !_followSystemTheme,
-                onTap: _followSystemTheme
-                    ? null
-                    : () => _showThemePicker(isDarkMode),
-              ),
-              SystemAnimationPreferenceTile(
-                value: _followSystemAnimations,
-                onChanged: (value) {
-                  AppState.followSystemAnimations = value;
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: Text(context.l10n.language),
-                subtitle: Text(_getLanguageName(_locale)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _showLanguagePicker,
-              ),
-            ],
+      body: DuoSafeArea(
+        child: ListView(
+          padding: EdgeInsets.only(
+            top: 16,
+            bottom: MediaQuery.paddingOf(context).bottom,
           ),
-          _SettingsSection(
-            title: context.l10n.settingsNotesEditing,
-            children: [
-              ValueListenableBuilder<bool>(
-                valueListenable: AppState.tableHeadersNotifier,
-                builder: (context, value, _) => SwitchListTile(
-                  secondary: const Icon(Icons.table_chart_outlined),
-                  title: Text(context.l10n.showTableHeaders),
-                  subtitle: Text(context.l10n.showTableHeadersDescription),
-                  value: value,
-                  onChanged: (value) => AppState.tableHeaders = value,
-                ),
-              ),
-              if (!kIsWeb) _WhisperModelTile(),
-            ],
-          ),
-          _SettingsSection(
-            title: context.l10n.reminders,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.wb_sunny_outlined),
-                title: Text(context.l10n.morning),
-                subtitle: Text(_formatTime(_morningTime)),
-                onTap: () =>
-                    _pickTime(context.l10n.morning, _morningTime, (time) {
-                      AppState.morningTime = time;
-                    }),
-              ),
-              ListTile(
-                leading: const Icon(Icons.wb_sunny),
-                title: Text(context.l10n.afternoon),
-                subtitle: Text(_formatTime(_afternoonTime)),
-                onTap: () =>
-                    _pickTime(context.l10n.afternoon, _afternoonTime, (time) {
-                      AppState.afternoonTime = time;
-                    }),
-              ),
-              ListTile(
-                leading: const Icon(Icons.nights_stay_outlined),
-                title: Text(context.l10n.evening),
-                subtitle: Text(_formatTime(_eveningTime)),
-                onTap: () =>
-                    _pickTime(context.l10n.evening, _eveningTime, (time) {
-                      AppState.eveningTime = time;
-                    }),
-              ),
-              if (_alarmSupported) ...[
-                ListTile(
-                  leading: const Icon(Icons.alarm),
-                  title: Text(context.l10n.alarmSound),
-                  subtitle: Text(path.basenameWithoutExtension(_alarmSound)),
-                  onTap: _showSoundPicker,
-                ),
-              ],
-            ],
-          ),
-          _SettingsSection(
-            title: context.l10n.settingsSync,
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.sync),
-                title: Text(context.l10n.showSyncProgress),
-                subtitle: Text(context.l10n.displaySyncStatus),
-                value: _showSyncProgress,
-                onChanged: (value) {
-                  AppState.showSyncProgress = value;
-                },
-              ),
-            ],
-          ),
-          _SettingsSection(
-            title: context.l10n.settingsPrivacySecurity,
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.lock_clock),
-                title: Text(context.l10n.forgetPasswordOnClose),
-                subtitle: Text(context.l10n.requireReenterPin),
-                value: _forgetLockedNotePassword,
-                onChanged: (value) {
-                  AppState.forgetLockedNotePassword = value;
-                },
-              ),
-              if (_localEncryptionAvailable) ...[
+          children: [
+            _SettingsSection(
+              title: context.l10n.settingsAppearanceLanguage,
+              children: [
                 SwitchListTile(
-                  secondary: const Icon(Icons.article_outlined),
-                  title: Text(context.l10n.encryptNoteContent),
-                  subtitle: Text(context.l10n.encryptNotesInDatabase),
-                  value: _notesEncryptionEnabled,
-                  onChanged: _toggleNotesEncryption,
+                  secondary: const Icon(Icons.brightness_auto),
+                  title: Text(context.l10n.followSystemTheme),
+                  subtitle: Text(context.l10n.autoSwitchLightDark),
+                  value: _followSystemTheme,
+                  onChanged: (value) {
+                    AppState.followSystemTheme = value;
+                  },
                 ),
+                // Dark mode toggle - disabled when following system theme
                 SwitchListTile(
-                  secondary: const Icon(Icons.image_outlined),
-                  title: Text(context.l10n.encryptAttachments),
-                  subtitle: Text(context.l10n.encryptImagesSketchesFiles),
-                  value: _filesEncryptionEnabled,
-                  onChanged: _toggleFilesEncryption,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                  secondary: Icon(
+                    isDarkMode ? Icons.dark_mode : Icons.light_mode,
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            context.l10n.localEncryptionInfo,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  title: Text(context.l10n.darkMode),
+                  value: isDarkMode,
+                  onChanged: _followSystemTheme
+                      ? null
+                      : (value) {
+                          if (value) {
+                            AppState.themeId = _darkThemeId;
+                          } else {
+                            AppState.themeId = _lightThemeId;
+                          }
+                        },
                 ),
-              ],
-            ],
-          ),
-          _SettingsSection(
-            title: context.l10n.settingsAdvanced,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.analytics),
-                title: Text(context.l10n.nerdStats),
-                subtitle: Text(context.l10n.viewDatabaseStats),
-                onTap: () {
-                  showPage(context, const NerdStatsPage());
-                },
-              ),
-              if (kDebugMode)
+                // Theme selector - disabled when following system theme
                 ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: const Text('Firebase environment'),
+                  leading: const Icon(Icons.palette_outlined),
+                  title: Text(
+                    isDarkMode
+                        ? context.l10n.darkTheme
+                        : context.l10n.lightTheme,
+                  ),
                   subtitle: Text(
-                    FirebaseEmulatorConfig.isUsingEmulators
-                        ? 'Emulator · '
-                              '${FirebaseEmulatorConfig.endpoints.host} · '
-                              '${FirebaseEmulatorConfig.googleAuthMode.name} Google'
-                        : 'Live Firebase',
+                    ThemeRegistry.getThemeName(
+                      isDarkMode ? _darkThemeId : _lightThemeId,
+                    ),
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _showFirebaseEnvironmentDialog,
+                  enabled: !_followSystemTheme,
+                  onTap: _followSystemTheme
+                      ? null
+                      : () => _showThemePicker(isDarkMode),
                 ),
-            ],
-          ),
-          _SettingsSection(
-            title: context.l10n.settingsHelpAbout,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.help_outline),
-                title: Text(context.l10n.help),
-                subtitle: Text(context.l10n.faqAndSupport),
-                onTap: () {
-                  showPage(context, const HelpPage());
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(context.l10n.about),
-                subtitle: Text(context.l10n.appInfoCredits),
-                onTap: () {
-                  showPage(context, const AboutPage());
-                },
-              ),
-            ],
-          ),
-        ],
+                SystemAnimationPreferenceTile(
+                  value: _followSystemAnimations,
+                  onChanged: (value) {
+                    AppState.followSystemAnimations = value;
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.language),
+                  title: Text(context.l10n.language),
+                  subtitle: Text(_getLanguageName(_locale)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _showLanguagePicker,
+                ),
+              ],
+            ),
+            _SettingsSection(
+              title: context.l10n.settingsNotesEditing,
+              children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: AppState.tableHeadersNotifier,
+                  builder: (context, value, _) => SwitchListTile(
+                    secondary: const Icon(Icons.table_chart_outlined),
+                    title: Text(context.l10n.showTableHeaders),
+                    subtitle: Text(context.l10n.showTableHeadersDescription),
+                    value: value,
+                    onChanged: (value) => AppState.tableHeaders = value,
+                  ),
+                ),
+                if (!kIsWeb) _WhisperModelTile(),
+              ],
+            ),
+            _SettingsSection(
+              title: context.l10n.reminders,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.wb_sunny_outlined),
+                  title: Text(context.l10n.morning),
+                  subtitle: Text(_formatTime(_morningTime)),
+                  onTap: () =>
+                      _pickTime(context.l10n.morning, _morningTime, (time) {
+                        AppState.morningTime = time;
+                      }),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.wb_sunny),
+                  title: Text(context.l10n.afternoon),
+                  subtitle: Text(_formatTime(_afternoonTime)),
+                  onTap: () =>
+                      _pickTime(context.l10n.afternoon, _afternoonTime, (time) {
+                        AppState.afternoonTime = time;
+                      }),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.nights_stay_outlined),
+                  title: Text(context.l10n.evening),
+                  subtitle: Text(_formatTime(_eveningTime)),
+                  onTap: () =>
+                      _pickTime(context.l10n.evening, _eveningTime, (time) {
+                        AppState.eveningTime = time;
+                      }),
+                ),
+                if (_alarmSupported) ...[
+                  ListTile(
+                    leading: const Icon(Icons.alarm),
+                    title: Text(context.l10n.alarmSound),
+                    subtitle: Text(path.basenameWithoutExtension(_alarmSound)),
+                    onTap: _showSoundPicker,
+                  ),
+                ],
+              ],
+            ),
+            _SettingsSection(
+              title: context.l10n.settingsSync,
+              children: [
+                SyncProviderTile(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const StorageSyncPage(),
+                    ),
+                  ),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.sync),
+                  title: Text(context.l10n.showSyncProgress),
+                  subtitle: Text(context.l10n.displaySyncStatus),
+                  value: _showSyncProgress,
+                  onChanged: (value) {
+                    AppState.showSyncProgress = value;
+                  },
+                ),
+              ],
+            ),
+            _SettingsSection(
+              title: context.l10n.settingsPrivacySecurity,
+              children: [
+                SwitchListTile(
+                  secondary: const Icon(Icons.lock_clock),
+                  title: Text(context.l10n.forgetPasswordOnClose),
+                  subtitle: Text(context.l10n.requireReenterPin),
+                  value: _forgetLockedNotePassword,
+                  onChanged: (value) {
+                    AppState.forgetLockedNotePassword = value;
+                  },
+                ),
+                if (_localEncryptionAvailable) ...[
+                  SwitchListTile(
+                    secondary: const Icon(Icons.article_outlined),
+                    title: Text(context.l10n.encryptNoteContent),
+                    subtitle: Text(context.l10n.encryptNotesInDatabase),
+                    value: _notesEncryptionEnabled,
+                    onChanged: _toggleNotesEncryption,
+                  ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.image_outlined),
+                    title: Text(context.l10n.encryptAttachments),
+                    subtitle: Text(context.l10n.encryptImagesSketchesFiles),
+                    value: _filesEncryptionEnabled,
+                    onChanged: _toggleFilesEncryption,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              context.l10n.localEncryptionInfo,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            _SettingsSection(
+              title: context.l10n.settingsAdvanced,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.analytics),
+                  title: Text(context.l10n.nerdStats),
+                  subtitle: Text(context.l10n.viewDatabaseStats),
+                  onTap: () {
+                    showPage(context, const NerdStatsPage());
+                  },
+                ),
+                if (kDebugMode)
+                  ListTile(
+                    leading: const Icon(Icons.dns_outlined),
+                    title: const Text('Firebase environment'),
+                    subtitle: Text(
+                      FirebaseEmulatorConfig.isUsingEmulators
+                          ? 'Emulator · '
+                                '${FirebaseEmulatorConfig.endpoints.host} · '
+                                '${FirebaseEmulatorConfig.googleAuthMode.name} Google'
+                          : 'Live Firebase',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _showFirebaseEnvironmentDialog,
+                  ),
+              ],
+            ),
+            _SettingsSection(
+              title: context.l10n.settingsHelpAbout,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.help_outline),
+                  title: Text(context.l10n.help),
+                  subtitle: Text(context.l10n.faqAndSupport),
+                  onTap: () {
+                    showPage(context, const HelpPage());
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(context.l10n.about),
+                  subtitle: Text(context.l10n.appInfoCredits),
+                  onTap: () {
+                    showPage(context, const AboutPage());
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

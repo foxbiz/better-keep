@@ -25,6 +25,7 @@ import PlatformIcon from './PlatformIcon.astro';
       <a href="/rich-text-notes">Rich text</a>
       <a href="/security">Security</a>
       <a href="/pricing">Pricing</a>
+      <a href="/help">Help</a>
     </div>
     <button
       class="mobile-menu-toggle"
@@ -45,6 +46,7 @@ import PlatformIcon from './PlatformIcon.astro';
       <a href="/rich-text-notes">Rich-text notes</a>
       <a href="/security">Security</a>
       <a href="/pricing">Pricing</a>
+      <a href="/help">Help</a>
       <a
         class="button"
         href={product.webAppUrl}
@@ -57,22 +59,30 @@ import PlatformIcon from './PlatformIcon.astro';
   </div>
 </header>
 
-<a
-      class="button floating-web-app"
-      href={product.webAppUrl}
-      data-analytics={product.analyticsGoals.webApp}
-      data-play-store-url={product.playStoreUrl}
-    >
-      <span data-app-action-label>Open web app</span>
-      <Icon name="ArrowRight" size={17} />
-    </a>
+{/* Not inside the header: its backdrop filter would reposition the fixed link. */}
+<nav aria-label="Open Better Keep">
+  <a
+    class="button floating-web-app"
+    href={product.webAppUrl}
+    data-analytics={product.analyticsGoals.webApp}
+    data-play-store-url={product.playStoreUrl}
+  >
+    <span data-app-action-label>Open web app</span>
+    <Icon name="ArrowRight" size={17} />
+  </a>
+</nav>
 
 <script>
   import { configureNativeAppAction } from '../lib/native-app-action';
+  import { hideWhileVisible } from '../lib/floating-action.ts';
 
   configureNativeAppAction(
     document.querySelector<HTMLAnchorElement>('.floating-web-app'),
     navigator
+  );
+  hideWhileVisible(
+    document.querySelector<HTMLElement>('.floating-web-app'),
+    document.querySelectorAll('[data-download-actions]')
   );
 
   const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
@@ -119,8 +129,7 @@ import PlatformIcon from './PlatformIcon.astro';
     }
     if (event.key !== 'Tab') return;
 
-    const floatingAction = document.querySelector<HTMLAnchorElement>('.floating-web-app');
-    const focusable = [toggle, ...navigation.querySelectorAll<HTMLElement>(focusableSelector), floatingAction].filter((element): element is HTMLElement => element !== null);
+    const focusable = [toggle, ...navigation.querySelectorAll<HTMLElement>(focusableSelector)].filter((element): element is HTMLElement => element !== null);
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) return;

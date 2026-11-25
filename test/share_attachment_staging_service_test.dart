@@ -205,6 +205,13 @@ class _MemoryFileSystem implements FileSystem {
       Uint8List.fromList(files[filePath] ?? (throw StateError('missing')));
 
   @override
+  Future<void> deleteTrees(List<String> paths) async {
+    files.removeWhere(
+      (key, _) => paths.any((p) => key == p || key.startsWith('$p/')),
+    );
+  }
+
+  @override
   Future<bool> delete(String filePath) async => files.remove(filePath) != null;
 
   @override

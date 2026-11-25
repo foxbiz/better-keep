@@ -1,11 +1,16 @@
 import 'dart:async';
 
+import 'package:better_keep/components/sync_progress_widget.dart';
+import 'package:better_keep/l10n/app_localizations.dart';
 import 'package:better_keep/models/app_progress.dart';
+import 'package:better_keep/services/note_sync_batch.dart';
+import 'package:better_keep/state.dart';
 import 'package:better_keep/services/cloud_session_recovery.dart';
 import 'package:better_keep/services/e2ee/e2ee_service.dart';
 import 'package:better_keep/services/post_sign_in_coordinator.dart';
 import 'package:better_keep/services/sync_presentation.dart';
-import 'package:flutter/foundation.dart';
+import 'package:better_keep/services/firebase_sync_preference.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -13,8 +18,9 @@ void main() {
   late SyncPresentation presentation;
   late Completer<CloudSessionState> verification;
   late Completer<void> initialization;
-  late ValueNotifier<bool> notes, labels;
-  late ValueNotifier<SyncProgress> noteStatus, labelStatus;
+  late ValueNotifier<bool> notes, labels, firebaseEnabled, sessionInvalid;
+  late ValueNotifier<SyncProgress> external;
+  late ValueNotifier<SyncProgress> noteStatus, labelStatus, orderStatus;
   late ValueNotifier<E2EEStatus> encryption;
   late ValueNotifier<PostSignInState> postSignIn;
 
@@ -26,21 +32,30 @@ void main() {
       onReady: (_) => initialization.future,
       onFailure: (_, _) {},
     )..setForeground(false);
+    firebaseEnabled = ValueNotifier(true);
+    sessionInvalid = ValueNotifier(false);
+    external = ValueNotifier(SyncProgress.idle);
     notes = ValueNotifier(false);
     labels = ValueNotifier(false);
     noteStatus = ValueNotifier(SyncProgress.idle);
+    orderStatus = ValueNotifier(SyncProgress.idle);
     labelStatus = ValueNotifier(SyncProgress.idle);
     encryption = ValueNotifier(E2EEStatus.ready);
     postSignIn = ValueNotifier(PostSignInState.idle);
     presentation = SyncPresentation(
       recovery: recovery,
+      externalChanges: external,
+      externalProgress: () => external.value,
+      firebaseChanges: firebaseEnabled,
+      firebaseSelected: () => firebaseEnabled.value,
       noteBusy: notes,
       labelBusy: labels,
       noteStatus: noteStatus,
+      orderStatus: orderStatus,
       labelStatus: labelStatus,
       noteFailures: ValueNotifier({}),
       labelFailures: ValueNotifier({}),
-      sessionInvalid: ValueNotifier(false),
+      sessionInvalid: sessionInvalid,
       encryptionStatus: encryption,
       postSignInState: postSignIn,
     );
@@ -49,6 +64,447 @@ void main() {
   tearDown(() {
     recovery.stop();
     presentation.dispose();
+  });
+
+  testWidgets('initial restore honors the sync progress display preference', (
+    tester,
+  ) async {
+    final reduceMotion = ValueNotifier(false);
+    addTearDown(reduceMotion.dispose);
+    final previous = AppState.showSyncProgress;
+    final session = NoteSyncBatch();
+    final done = Completer<void>();
+    final work = session.run(
+      24,
+      (_) => done.future,
+      isEmptyLibrary: () async => true,
+    );
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => ValueListenableBuilder<bool>(
+            valueListenable: reduceMotion,
+            builder: (context, reduce, _) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: reduce),
+              child: child!,
+            ),
+          ),
+          home: const Scaffold(body: BulkSyncProgress()),
+        ),
+      );
+      for (final show in [true, false]) {
+        AppState.set('show_sync_progress', show);
+        await tester.pump();
+        expect(find.text('24 notes'), show ? findsOneWidget : findsNothing);
+        if (!show) {
+          expect(find.bySemanticsLabel('Downloading Notes'), findsOneWidget);
+        }
+        final download = find.byKey(const ValueKey('download_activity'));
+        expect(download, findsOneWidget);
+        expect(find.text('0%'), show ? findsOneWidget : findsNothing);
+        expect(
+          find.byType(LinearProgressIndicator),
+          show ? findsOneWidget : findsNothing,
+        );
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        List<Offset> shaftPoints() {
+          final canvas = TestRecordingCanvas();
+          tester
+              .widget<CustomPaint>(download)
+              .painter!
+              .paint(canvas, tester.getSize(download));
+          final shaft = canvas.invocations
+              .map((call) => call.invocation)
+              .singleWhere((call) => call.memberName == #drawLine)
+              .positionalArguments;
+          return shaft.take(2).cast<Offset>().toList();
+        }
+
+        final center = tester.getCenter(download);
+        final before = shaftPoints();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 700));
+        expect(tester.getCenter(download), center);
+        expect(shaftPoints(), isNot(before));
+        expect(
+          (shaftPoints()[1] - shaftPoints()[0]).distance,
+          (before[1] - before[0]).distance,
+        );
+        reduceMotion.value = true;
+        await tester.pump();
+        final still = shaftPoints();
+        expect((still[1] - still[0]).distance, greaterThan(0));
+        await tester.pump(const Duration(milliseconds: 700));
+        expect(shaftPoints(), still);
+        reduceMotion.value = false;
+        await tester.pump();
+      }
+    } finally {
+      done.complete();
+      await work;
+      AppState.set('show_sync_progress', previous);
+    }
+  });
+
+  test(
+    'checking publishes the first result and flushes the full count once',
+    () {
+      var elapsed = Duration.zero;
+      final samples = <NoteTransfer>[];
+      final meter = NoteTransferMeter(
+        NoteTransferStage.checking,
+        null,
+        samples.add,
+        elapsed: () => elapsed,
+      );
+      for (var batch = 0; batch < 80; batch++) {
+        meter.advance(10);
+      }
+      elapsed = const Duration(milliseconds: 500);
+      meter.advance(20);
+      meter.advance(3);
+      meter.flush();
+      meter.flush();
+      expect(samples.map((p) => p.done), [0, 10, 823]);
+      expect(
+        samples.every((p) => p.total == null && p.minutesLeft == null),
+        isTrue,
+      );
+    },
+  );
+
+  test('estimate uses completed work and resets at a phase boundary', () {
+    final samples = <NoteTransfer>[];
+    var elapsed = Duration.zero;
+    final meter = NoteTransferMeter(
+      NoteTransferStage.downloading,
+      60,
+      samples.add,
+      elapsed: () => elapsed,
+    );
+    expect(samples.single.minutesLeft, isNull);
+    meter.advance();
+    meter.advance();
+    expect(samples.length, 1);
+    elapsed = const Duration(seconds: 6);
+    meter.advance();
+    expect(samples.last.done, 3);
+    expect(samples.last.minutesLeft, isNull);
+    for (var i = 4; i <= 12; i++) {
+      elapsed = Duration(seconds: i * 2);
+      meter.advance();
+    }
+    expect(samples.last.minutesLeft, 2);
+    for (var i = 12; i < 60; i++) {
+      meter.advance();
+    }
+    expect(samples.last.fraction, 1);
+    expect(samples.last.minutesLeft, isNull);
+    NoteTransferMeter(NoteTransferStage.uploading, 3, samples.add);
+    expect(samples.last.done, 0);
+    expect(samples.last.minutesLeft, isNull);
+  });
+
+  test(
+    'upload estimate excludes startup delay and follows recent throughput',
+    () {
+      var elapsed = const Duration(minutes: 5);
+      final samples = <NoteTransfer>[];
+      final meter = NoteTransferMeter(
+        NoteTransferStage.uploading,
+        1000,
+        samples.add,
+        elapsed: () => elapsed,
+      );
+      for (var i = 0; i < 12; i++) {
+        meter.advance();
+        elapsed += const Duration(seconds: 2);
+      }
+      expect(samples.last.minutesLeft, 33);
+      for (var i = 0; i < 40; i++) {
+        meter.advance();
+        elapsed += const Duration(seconds: 1);
+      }
+      meter.flush();
+      expect(samples.last.minutesLeft, 16);
+      expect(samples.last.done, 52);
+    },
+  );
+
+  test('fast long transfers retain enough elapsed history to estimate', () {
+    var elapsed = Duration.zero;
+    final samples = <NoteTransfer>[];
+    final meter = NoteTransferMeter(
+      NoteTransferStage.uploading,
+      10000,
+      samples.add,
+      elapsed: () => elapsed,
+    );
+    for (var i = 0; i < 1000; i++) {
+      elapsed += const Duration(milliseconds: 100);
+      meter.advance();
+    }
+    meter.flush();
+    expect(samples.last.done, 1000);
+    expect(samples.last.minutesLeft, 15);
+  });
+
+  test('delayed flush does not count idle time as transfer time', () {
+    var elapsed = Duration.zero;
+    final samples = <NoteTransfer>[];
+    final meter = NoteTransferMeter(
+      NoteTransferStage.uploading,
+      1000,
+      samples.add,
+      elapsed: () => elapsed,
+    );
+    for (var i = 0; i < 12; i++) {
+      meter.advance();
+      elapsed += const Duration(seconds: 2);
+    }
+    elapsed = const Duration(milliseconds: 22100);
+    meter.advance(); // Under the 500 ms publish interval.
+    elapsed = const Duration(minutes: 3);
+    meter.flush();
+    expect(samples.last.done, 13);
+    expect(samples.last.minutesLeft, 30);
+  });
+
+  test('download progress keeps its total when a revision is skipped', () {
+    final samples = <NoteTransfer>[];
+    final meter = NoteTransferMeter(
+      NoteTransferStage.downloading,
+      3,
+      samples.add,
+    );
+    meter.advance();
+    meter.exclude();
+    meter.flush();
+    expect(samples.last.total, 3);
+    expect(samples.last.done, 2);
+    meter.advance();
+    expect(samples.last.fraction, 1);
+  });
+
+  test(
+    'deferred notes shrink the expected transfer without counting as writes',
+    () {
+      final samples = <NoteTransfer>[];
+      final meter = NoteTransferMeter(
+        NoteTransferStage.uploading,
+        5,
+        samples.add,
+        elapsed: () => Duration.zero,
+      );
+      meter.advance();
+      meter.exclude(2);
+      meter.flush();
+      expect(samples.last.done, 1);
+      expect(samples.last.total, 3);
+      expect(samples.last.minutesLeft, isNull);
+      meter.advance();
+      meter.advance();
+      expect(samples.last.fraction, 1);
+    },
+  );
+
+  test('paused uploads still show incoming activity and failure', () async {
+    final preference = FirebaseSyncPreference(
+      currentUid: () => 'account-a',
+      watch: (_) =>
+          Stream.value(const FirebaseSyncSelection(false, confirmed: true)),
+      write: (_, _) async => throw StateError('No writes expected'),
+    )..bind('account-a');
+    addTearDown(preference.dispose);
+    await pumpEventQueue();
+    firebaseEnabled.value = preference.allowsDownload('account-a');
+    expect(preference.allowsSync('account-a'), false);
+    const update = (
+      stage: NoteTransferStage.downloading,
+      done: 9,
+      total: 20,
+      minutesLeft: 1,
+    );
+    noteStatus.value = const SyncProgress(SyncPhase.syncing, notes: update);
+    recovery.state.value = CloudSessionState.ready;
+    notes.value = true;
+    expect(presentation.value.phase, SyncPhase.syncing);
+    external.value = const SyncProgress(SyncPhase.syncing);
+    expect(presentation.value.notes, update);
+    external.value = SyncProgress.idle;
+    notes.value = false;
+    noteStatus.value = const SyncProgress(SyncPhase.failed, failedCount: 1);
+    expect(presentation.value.phase, SyncPhase.failed);
+    noteStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+    expect(presentation.value.phase, SyncPhase.uploadRestricted);
+  });
+
+  test(
+    'external transfers remain visible while Firebase is unavailable or paused',
+    () {
+      recovery.connectionLost();
+      external.value = const SyncProgress(SyncPhase.syncing);
+      expect(presentation.value.phase, SyncPhase.syncing);
+      external.value = const SyncProgress(SyncPhase.complete);
+      expect(presentation.value.phase, SyncPhase.idle);
+      firebaseEnabled.value = false;
+      expect(presentation.value.phase, SyncPhase.complete);
+      noteStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+      expect(presentation.value.phase, SyncPhase.complete);
+    },
+  );
+
+  test(
+    'source read feedback survives presentation and yields to storage failure',
+    () {
+      external.value = const SyncProgress(SyncPhase.sourceReadFailure);
+      expect(presentation.value.phase, SyncPhase.sourceReadFailure);
+      expect(presentation.value.isFailure, isTrue);
+      final request = presentation.beginManual(() => true);
+      presentation.finishManual(request, SyncRefreshOutcome.sourceReadFailure);
+      expect(presentation.value.phase, SyncPhase.sourceReadFailure);
+      expect(
+        combineSyncRefreshOutcomes([
+          SyncRefreshOutcome.unavailable,
+          SyncRefreshOutcome.sourceReadFailure,
+        ]),
+        SyncRefreshOutcome.sourceReadFailure,
+      );
+      expect(
+        combineSyncRefreshOutcomes([
+          SyncRefreshOutcome.localStorageFailure,
+          SyncRefreshOutcome.sourceReadFailure,
+        ]),
+        SyncRefreshOutcome.localStorageFailure,
+      );
+      expect(
+        combineSyncRefreshOutcomes([
+          SyncRefreshOutcome.failed,
+          SyncRefreshOutcome.sourceReadFailure,
+        ]),
+        SyncRefreshOutcome.failed,
+      );
+    },
+  );
+
+  test('guided note recovery and retry waits retain their presentation', () {
+    firebaseEnabled.value = false;
+    for (final phase in [
+      SyncPhase.notesNeedUnlock,
+      SyncPhase.notesNeedAttention,
+      SyncPhase.retryScheduled,
+    ]) {
+      external.value = SyncProgress(phase);
+      expect(presentation.value.phase, phase);
+      expect(presentation.value.isActive, isFalse);
+    }
+    final request = presentation.beginManual(() => true);
+    presentation.finishManual(request, SyncRefreshOutcome.retryScheduled);
+    expect(presentation.value.phase, SyncPhase.retryScheduled);
+  });
+
+  test('local storage failure survives aggregation and manual completion', () {
+    external.value = const SyncProgress(SyncPhase.localStorageFailure);
+    expect(presentation.value.phase, SyncPhase.localStorageFailure);
+    expect(presentation.value.isFailure, isTrue);
+    final request = presentation.beginManual(() => true);
+    presentation.finishManual(request, SyncRefreshOutcome.localStorageFailure);
+    expect(presentation.value.phase, SyncPhase.localStorageFailure);
+    expect(
+      combineSyncRefreshOutcomes([
+        SyncRefreshOutcome.unavailable,
+        SyncRefreshOutcome.localStorageFailure,
+        SyncRefreshOutcome.failed,
+      ]),
+      SyncRefreshOutcome.localStorageFailure,
+    );
+  });
+
+  test('external progress cannot hide sign-in or approval requirements', () {
+    firebaseEnabled.value = false;
+    external.value = const SyncProgress(SyncPhase.syncing);
+    expect(presentation.value.phase, SyncPhase.syncing);
+    sessionInvalid.value = true;
+    expect(presentation.value.phase, SyncPhase.signInRequired);
+    sessionInvalid.value = false;
+    encryption.value = E2EEStatus.pendingApproval;
+    expect(presentation.value.phase, SyncPhase.waitingForApproval);
+    encryption.value = E2EEStatus.ready;
+    expect(presentation.value.phase, SyncPhase.syncing);
+  });
+
+  test('external failure or pending work prevents a global success', () {
+    recovery.state.value = CloudSessionState.ready;
+    noteStatus.value = const SyncProgress(SyncPhase.complete);
+    external.value = const SyncProgress(SyncPhase.failed, failedCount: 2);
+    expect(presentation.value.phase, SyncPhase.failed);
+    expect(presentation.value.failedCount, 2);
+    external.value = const SyncProgress(SyncPhase.storageFull);
+    expect(presentation.value.phase, SyncPhase.storageFull);
+    expect(presentation.value.isFailure, true);
+    external.value = const SyncProgress(SyncPhase.deferred);
+    expect(presentation.value.phase, SyncPhase.deferred);
+    external.value = const SyncProgress(SyncPhase.providerSetupRequired);
+    expect(presentation.value.phase, SyncPhase.providerSetupRequired);
+    expect(presentation.value.isFailure, false);
+    external.value = const SyncProgress(SyncPhase.syncing);
+    expect(presentation.value.phase, SyncPhase.syncing);
+    external.value = const SyncProgress(SyncPhase.complete);
+    expect(presentation.value.phase, SyncPhase.complete);
+  });
+
+  test(
+    'order-only work and failures contribute to combined Firebase progress',
+    () {
+      recovery.state.value = CloudSessionState.ready;
+      noteStatus.value = const SyncProgress(SyncPhase.complete);
+      orderStatus.value = const SyncProgress(SyncPhase.syncing);
+      expect(presentation.value.phase, SyncPhase.syncing);
+      orderStatus.value = const SyncProgress(SyncPhase.failed);
+      expect(presentation.value.phase, SyncPhase.failed);
+      orderStatus.value = const SyncProgress(SyncPhase.uploadRestricted);
+      expect(presentation.value.phase, SyncPhase.uploadRestricted);
+      orderStatus.value = SyncProgress.idle;
+      labelStatus.value = const SyncProgress(SyncPhase.complete);
+      expect(presentation.value.phase, SyncPhase.uploadRestricted);
+      orderStatus.value = const SyncProgress(SyncPhase.complete);
+      expect(presentation.value.phase, SyncPhase.complete);
+    },
+  );
+
+  test(
+    'empty restored library acknowledges startup verification until offline',
+    () async {
+      postSignIn.value = PostSignInState.ready;
+      final check = recovery.check();
+      expect(presentation.value.phase, SyncPhase.idle);
+      expect(presentation.emptyLibraryProgress.phase, SyncPhase.preparing);
+      verification.complete(CloudSessionState.unavailable);
+      await check;
+      expect(presentation.emptyLibraryProgress.phase, SyncPhase.idle);
+    },
+  );
+
+  test('empty library does not add a restore placeholder when encryption blocks access', () async {
+    postSignIn.value = PostSignInState.ready;
+    final check = recovery.check();
+    for (final status in [
+      E2EEStatus.pendingApproval,
+      E2EEStatus.needsRecovery,
+      E2EEStatus.revoked,
+    ]) {
+      encryption.value = status;
+      expect(
+        presentation.emptyLibraryProgress.phase,
+        status == E2EEStatus.pendingApproval
+            ? SyncPhase.waitingForApproval
+            : SyncPhase.deferred,
+      );
+    }
+    verification.complete(CloudSessionState.unavailable);
+    await check;
   });
 
   test('new session immediately prepares before any verification event', () {
@@ -102,7 +558,7 @@ void main() {
     );
     expect(presentation.value.phase, SyncPhase.preparing);
     recovery.connectionLost();
-    expect(presentation.value.phase, SyncPhase.unavailable);
+    expect(presentation.value.phase, SyncPhase.idle);
     expect(presentation.value.isActive, isFalse);
   });
 
@@ -161,6 +617,23 @@ void main() {
   );
 
   test(
+    'refresh during startup keeps preparing until note checking starts',
+    () async {
+      final request = presentation.beginManual(() => true);
+      final check = recovery.check();
+      verification.complete(CloudSessionState.ready);
+      await check;
+      presentation.finishManual(request, SyncRefreshOutcome.deferred);
+      expect(presentation.value.phase, SyncPhase.preparing);
+      notes.value = true;
+      noteStatus.value = const SyncProgress(SyncPhase.fetchingUpdates);
+      expect(presentation.value.phase, SyncPhase.fetchingUpdates);
+      initialization.complete();
+      await pumpEventQueue();
+    },
+  );
+
+  test(
     'manual activity lasts through notes and labels and preserves restrictions',
     () async {
       final request = presentation.beginManual(() => true);
@@ -185,18 +658,18 @@ void main() {
       expect(presentation.value.phase, SyncPhase.uploadRestricted);
       expect(presentation.value.isActive, isFalse);
       recovery.connectionLost();
-      expect(presentation.value.phase, SyncPhase.unavailable);
+      expect(presentation.value.phase, SyncPhase.idle);
     },
   );
 
   test(
-    'offline and approval backoff show a reason without a spinner',
+    'offline retries stay silent while an approval request remains visible',
     () async {
       final check = recovery.check();
       verification.complete(CloudSessionState.unavailable);
       await check;
       expect(recovery.activity.value, CloudRecoveryActivity.idle);
-      expect(presentation.value.phase, SyncPhase.unavailable);
+      expect(presentation.value.phase, SyncPhase.idle);
       expect(presentation.value.isActive, isFalse);
       encryption.value = E2EEStatus.pendingApproval;
       recovery.state.value = CloudSessionState.pending;
@@ -249,6 +722,6 @@ void main() {
     expect(recovery.activity.value, CloudRecoveryActivity.idle);
     verification.complete(CloudSessionState.ready);
     await tester.pump();
-    expect(presentation.value.phase, SyncPhase.unavailable);
+    expect(presentation.value.phase, SyncPhase.idle);
   });
 }

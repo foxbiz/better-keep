@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:better_keep/services/local_storage_recovery.dart';
+import 'package:better_keep/services/file_system.dart'
+    show initializeAccountFileStorage;
 import 'package:better_keep/services/attachment_repair_coordinator.dart';
 import 'package:better_keep/pages/home/folder_breadcrumb.dart';
 import 'package:better_keep/config.dart';
@@ -80,27 +83,85 @@ class AppState {
     return _prefs!;
   }
 
-  /// Safely persist a value to SharedPreferences with error handling
   static Future<void> _syncPreferenceWrites = Future<void>.value();
+  // Only device preferences go through this queue. Keep one in-flight and
+  // one latest value per setting; a stalled plugin write cannot block others.
+  static final _writingSettings =
+      <String, Future<void> Function(SharedPreferences)>{};
+  static final _pendingSettings =
+      <String, Future<void> Function(SharedPreferences)>{};
+  static Future<void>? _clearingPreferences;
+  static bool _reloadingPreferences = false;
 
-  static void _persistToPrefs(
-    Future<void> Function(SharedPreferences p) action,
-  ) {
-    prefs.then(action).catchError((Object e) {
-      AppLogger.error('AppState: Failed to persist preference', e);
-    });
+  static Future<void> clearSignOutPreferences({
+    Duration timeout = const Duration(seconds: 15),
+  }) {
+    return _clearingPreferences ??= _clearSignOutPreferences(timeout)
+        .whenComplete(() => _clearingPreferences = null);
   }
 
-  // Only checkpoint writes need ordering against recovery's checkpoint reset.
-  static void _persistSyncToPrefs(
-    Future<void> Function(SharedPreferences p) action,
+  static Future<void> _clearSignOutPreferences(Duration timeout) async {
+    // Account checkpoints must finish before their keys can be removed.
+    await _syncPreferenceWrites.timeout(timeout);
+    _reloadingPreferences = true;
+    try {
+      // reload() replaces the plugin's cache. Reapply an overlapping device
+      // setting after reload, unless a newer value for it is already queued.
+      for (final entry in _writingSettings.entries) {
+        _pendingSettings.putIfAbsent(entry.key, () => entry.value);
+      }
+      await FirebaseScopedPreferences.clearActiveAccountPreferences(
+        await prefs,
+      );
+    } finally {
+      _reloadingPreferences = false;
+      for (final key in _pendingSettings.keys.toList()) {
+        _writePendingSetting(key);
+      }
+    }
+  }
+
+  static void _persistToPrefs(
+    String key,
+    Future<void> Function(SharedPreferences) action,
   ) {
+    _pendingSettings[key] = action;
+    _writePendingSetting(key);
+  }
+
+  static void _saveBool(String key, bool value) =>
+      _persistToPrefs(key, (prefs) async => prefs.setBool(key, value));
+  static void _saveString(String key, String value) =>
+      _persistToPrefs(key, (prefs) async => prefs.setString(key, value));
+  static void _saveDouble(String key, double value) =>
+      _persistToPrefs(key, (prefs) async => prefs.setDouble(key, value));
+
+  static void _writePendingSetting(String key) {
+    if (_reloadingPreferences || _writingSettings.containsKey(key)) return;
+    final action = _pendingSettings.remove(key);
+    if (action == null) return;
+    _writingSettings[key] = action;
+    unawaited(
+      prefs
+          .then(action)
+          .catchError((Object e) {
+            AppLogger.error('AppState: Failed to persist preference', e);
+          })
+          .whenComplete(() {
+            _writingSettings.remove(key);
+            _writePendingSetting(key);
+          }),
+    );
+  }
+
+  // Checkpoint updates must retain their order relative to a checkpoint reset.
+  static void _persistSyncToPrefs(
+    Future<void> Function(SharedPreferences) action,
+  ) {
+    if (_clearingPreferences != null) return;
     _syncPreferenceWrites = _syncPreferenceWrites
-        .then((_) async {
-          await action(await prefs);
-        })
+        .then((_) => prefs.then(action))
         .catchError((Object e) {
-          // Log error but don't crash - preference persistence is best-effort
           AppLogger.error('AppState: Failed to persist preference', e);
         });
   }
@@ -125,7 +186,8 @@ class AppState {
   }
 
   static Future<void> reset() async {
-    Database db = AppState.db;
+    // A cold-start sign-out clears account state before SQLite is opened.
+    final db = _state["db"];
     String themeId = AppState.themeId;
     String alarmSound = AppState.alarmSound;
     bool followSystemTheme = AppState.followSystemTheme;
@@ -138,6 +200,7 @@ class AppState {
     GlobalKey<NavigatorState> navigatorKey = AppState.navigatorKey;
     _state.clear();
     _state.addAll(_defaultState);
+    _state["show_sync_progress"] = showSyncProgressNotifier.value;
     _state["db"] = db;
     _state["theme_id"] = themeId;
     _state["theme"] =
@@ -161,6 +224,7 @@ class AppState {
     // Use provided prefs or load fresh (caching for later use)
     _prefs = prefs ?? await SharedPreferences.getInstance();
     final prefsInstance = _prefs!;
+    initializeAccountFileStorage(prefsInstance);
 
     // Load theme settings
     final followSystemTheme =
@@ -304,6 +368,7 @@ class AppState {
     // Load sync progress visibility setting
     _state["show_sync_progress"] =
         prefsInstance.getBool("show_sync_progress") ?? true;
+    showSyncProgressNotifier.value = showSyncProgress;
 
     // Load forget locked note password setting
     _state["forget_locked_note_password"] =
@@ -379,6 +444,9 @@ class AppState {
 
   static void set(String key, Object? value) {
     _state[key] = value;
+    if (key == 'show_sync_progress') {
+      showSyncProgressNotifier.value = showSyncProgress;
+    }
     notify(key, value);
   }
 
@@ -414,7 +482,7 @@ class AppState {
       ThemeRegistry.getTheme(id) ??
           ThemeRegistry.darkThemes[ThemeRegistry.defaultDarkThemeId],
     );
-    _persistToPrefs((p) async => p.setString("theme_id", id));
+    _saveString("theme_id", id);
   }
 
   /// Whether the app is currently in dark mode
@@ -429,7 +497,7 @@ class AppState {
 
   static set followSystemTheme(bool value) {
     set("follow_system_theme", value);
-    _persistToPrefs((p) async => p.setBool("follow_system_theme", value));
+    _saveBool("follow_system_theme", value);
     if (value) {
       // Apply system theme immediately when enabled
       // This only changes the current applied theme, not user's dark/light preference
@@ -448,7 +516,7 @@ class AppState {
   static set followSystemAnimations(bool value) {
     set("follow_system_animations", value);
     MotionPreferences.instance.setFollowSystem(value);
-    _persistToPrefs((p) async => p.setBool("follow_system_animations", value));
+    _saveBool("follow_system_animations", value);
   }
 
   /// The preferred dark theme ID
@@ -459,7 +527,7 @@ class AppState {
 
   static set darkThemeId(String id) {
     set("dark_theme_id", id);
-    _persistToPrefs((p) async => p.setString("dark_theme_id", id));
+    _saveString("dark_theme_id", id);
     // If currently in dark mode and following system or manually set to dark, apply
     if (isDarkMode ||
         (followSystemTheme &&
@@ -477,7 +545,7 @@ class AppState {
 
   static set lightThemeId(String id) {
     set("light_theme_id", id);
-    _persistToPrefs((p) async => p.setString("light_theme_id", id));
+    _saveString("light_theme_id", id);
     // If currently in light mode and following system or manually set to light, apply
     if (!isDarkMode ||
         (followSystemTheme &&
@@ -502,8 +570,10 @@ class AppState {
 
   static set alarmSound(String path) {
     set("alarm_sound", path);
-    _persistToPrefs((p) async => p.setString("alarm_sound", path));
+    _saveString("alarm_sound", path);
   }
+
+  static final showSyncProgressNotifier = ValueNotifier(true);
 
   static bool get showSyncProgress {
     return _state["show_sync_progress"] as bool? ?? true;
@@ -511,7 +581,7 @@ class AppState {
 
   static set showSyncProgress(bool value) {
     set("show_sync_progress", value);
-    _persistToPrefs((p) async => p.setBool("show_sync_progress", value));
+    _saveBool("show_sync_progress", value);
   }
 
   /// ValueNotifier for reactive UI updates (used by _DialogPageRoute)
@@ -526,7 +596,7 @@ class AppState {
   static set editorFullScreen(bool value) {
     set("editor_full_screen", value);
     editorFullScreenNotifier.value = value;
-    _persistToPrefs((p) async => p.setBool("editor_full_screen", value));
+    _saveBool("editor_full_screen", value);
   }
 
   static final tableHeadersNotifier = ValueNotifier(false);
@@ -536,7 +606,7 @@ class AppState {
   static set tableHeaders(bool value) {
     set("table_headers", value);
     tableHeadersNotifier.value = value;
-    _persistToPrefs((p) async => p.setBool("table_headers", value));
+    _saveBool("table_headers", value);
   }
 
   static SketchTool get sketchTool {
@@ -545,7 +615,7 @@ class AppState {
 
   static set sketchTool(SketchTool value) {
     set("sketch_tool", value);
-    _persistToPrefs((p) async => p.setString("sketch_tool", value.name));
+    _saveString("sketch_tool", value.name);
   }
 
   static double get sketchPenSize {
@@ -554,7 +624,7 @@ class AppState {
 
   static set sketchPenSize(double value) {
     set("sketch_pen_size", value);
-    _persistToPrefs((p) async => p.setDouble("sketch_pen_size", value));
+    _saveDouble("sketch_pen_size", value);
   }
 
   static double get sketchPencilSize {
@@ -563,7 +633,7 @@ class AppState {
 
   static set sketchPencilSize(double value) {
     set("sketch_pencil_size", value);
-    _persistToPrefs((p) async => p.setDouble("sketch_pencil_size", value));
+    _saveDouble("sketch_pencil_size", value);
   }
 
   static double get sketchBrushSize {
@@ -572,7 +642,7 @@ class AppState {
 
   static set sketchBrushSize(double value) {
     set("sketch_brush_size", value);
-    _persistToPrefs((p) async => p.setDouble("sketch_brush_size", value));
+    _saveDouble("sketch_brush_size", value);
   }
 
   static double get sketchHighlighterSize {
@@ -581,7 +651,7 @@ class AppState {
 
   static set sketchHighlighterSize(double value) {
     set("sketch_highlighter_size", value);
-    _persistToPrefs((p) async => p.setDouble("sketch_highlighter_size", value));
+    _saveDouble("sketch_highlighter_size", value);
   }
 
   static double get sketchEraserSize {
@@ -590,7 +660,7 @@ class AppState {
 
   static set sketchEraserSize(double value) {
     set("sketch_eraser_size", value);
-    _persistToPrefs((p) async => p.setDouble("sketch_eraser_size", value));
+    _saveDouble("sketch_eraser_size", value);
   }
 
   /// Get size for a specific sketch tool
@@ -632,6 +702,7 @@ class AppState {
   static set sketchPenColor(Color value) {
     set("sketch_pen_color", value);
     _persistToPrefs(
+      "sketch_pen_color",
       (p) async => p.setInt("sketch_pen_color", value.toARGB32()),
     );
   }
@@ -649,6 +720,7 @@ class AppState {
     }
     set("recent_colors", colors);
     _persistToPrefs(
+      "recent_colors",
       (p) async => p.setStringList(
         "recent_colors",
         colors.map((e) => e.toARGB32().toString()).toList(),
@@ -687,7 +759,7 @@ class AppState {
   static set matchAllLabels(bool value) {
     if (value == matchAllLabels) return;
     set("match_all_labels", value);
-    _persistToPrefs((p) async => p.setBool("match_all_labels", value));
+    _saveBool("match_all_labels", value);
   }
 
   static Database get db {
@@ -817,9 +889,11 @@ class AppState {
 
   static set morningTime(TimeOfDay time) {
     set("morning_time", time);
-    _persistToPrefs((p) async {
-      p.setInt("morning_time_hour", time.hour);
-      p.setInt("morning_time_minute", time.minute);
+    _persistToPrefs("morning_time_hour", (p) async {
+      await Future.wait([
+        p.setInt("morning_time_hour", time.hour),
+        p.setInt("morning_time_minute", time.minute),
+      ]);
     });
   }
 
@@ -829,9 +903,11 @@ class AppState {
 
   static set afternoonTime(TimeOfDay time) {
     set("afternoon_time", time);
-    _persistToPrefs((p) async {
-      p.setInt("afternoon_time_hour", time.hour);
-      p.setInt("afternoon_time_minute", time.minute);
+    _persistToPrefs("afternoon_time_hour", (p) async {
+      await Future.wait([
+        p.setInt("afternoon_time_hour", time.hour),
+        p.setInt("afternoon_time_minute", time.minute),
+      ]);
     });
   }
 
@@ -841,9 +917,11 @@ class AppState {
 
   static set eveningTime(TimeOfDay time) {
     set("evening_time", time);
-    _persistToPrefs((p) async {
-      p.setInt("evening_time_hour", time.hour);
-      p.setInt("evening_time_minute", time.minute);
+    _persistToPrefs("evening_time_hour", (p) async {
+      await Future.wait([
+        p.setInt("evening_time_hour", time.hour),
+        p.setInt("evening_time_minute", time.minute),
+      ]);
     });
   }
 
@@ -854,9 +932,7 @@ class AppState {
 
   static set forgetLockedNotePassword(bool value) {
     set("forget_locked_note_password", value);
-    _persistToPrefs(
-      (p) async => p.setBool("forget_locked_note_password", value),
-    );
+    _saveBool("forget_locked_note_password", value);
   }
 
   /// Whether the user has dismissed the "Rate App" sidebar item
@@ -866,7 +942,7 @@ class AppState {
 
   static set rateAppDismissed(bool value) {
     set("rate_app_dismissed", value);
-    _persistToPrefs((p) async => p.setBool("rate_app_dismissed", value));
+    _saveBool("rate_app_dismissed", value);
   }
 
   /// View mode for displaying notes (grid, list, or folder)
@@ -876,7 +952,7 @@ class AppState {
 
   static set notesViewMode(NoteViewMode value) {
     set("notes_view_mode", value);
-    _persistToPrefs((p) async => p.setString("notes_view_mode", value.name));
+    _saveString("notes_view_mode", value.name);
   }
 
   static FolderLocation? get currentFolder {
@@ -891,7 +967,7 @@ class AppState {
   static set currentFolder(FolderLocation? value) {
     final locStr = value?.toStorageString() ?? "";
     set("current_folder", locStr);
-    _persistToPrefs((p) async => p.setString("current_folder", locStr));
+    _saveString("current_folder", locStr);
   }
 
   static bool getToolbarGridMode(String key) {
@@ -905,6 +981,7 @@ class AppState {
     modes[key] = value;
     set("toolbar_grid_modes", modes);
     _persistToPrefs(
+      "toolbar_grid_modes",
       (p) async => p.setString("toolbar_grid_modes", jsonEncode(modes)),
     );
   }
@@ -918,12 +995,12 @@ class AppState {
   static set locale(Locale? value) {
     set("locale", value);
     if (value == null) {
-      _persistToPrefs((p) async => p.remove("locale"));
+      _persistToPrefs("locale", (p) async => p.remove("locale"));
     } else {
       final localeString = value.countryCode != null
           ? '${value.languageCode}_${value.countryCode}'
           : value.languageCode;
-      _persistToPrefs((p) async => p.setString("locale", localeString));
+      _saveString("locale", localeString);
     }
   }
 

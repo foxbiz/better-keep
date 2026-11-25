@@ -1,6 +1,7 @@
 import 'package:better_keep/pages/note_editor/note_find_controller.dart';
 import 'package:better_keep/services/note_search_service.dart';
 import 'package:better_keep/utils/l10n_helper.dart';
+import 'package:better_keep/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' as intl;
@@ -55,17 +56,22 @@ class NoteFindBar extends StatelessWidget {
                     horizontal: 4,
                     vertical: 4,
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildFindRow(context),
-                      if (controller.replaceExpanded &&
-                          canEdit &&
-                          controller.mode != NoteSearchMode.smart)
-                        _buildReplaceRow(context),
-                      if (controller.error != null)
-                        _buildError(context, controller.error!),
-                    ],
+                  child: Theme(
+                    data: _themeOn(surfaceColor, Theme.of(context)),
+                    child: Builder(
+                      builder: (barContext) => Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildFindRow(barContext, Theme.of(context)),
+                          if (controller.replaceExpanded &&
+                              canEdit &&
+                              controller.mode != NoteSearchMode.smart)
+                            _buildReplaceRow(barContext),
+                          if (controller.error != null)
+                            _buildError(barContext, controller.error!),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -76,7 +82,43 @@ class NoteFindBar extends StatelessWidget {
     );
   }
 
-  Widget _buildFindRow(BuildContext context) {
+  bool _matchesTheme(ThemeData theme) =>
+      isDark(backgroundColor) == (theme.brightness == Brightness.dark);
+
+  /// The bar has the note's color, which need not match the app theme.
+  ThemeData _themeOn(Color surface, ThemeData base) {
+    if (_matchesTheme(base)) return base;
+    Color visible(Color color) =>
+        visibleOn(surface, color, fallback: foregroundColor);
+    final icons = WidgetStateProperty.resolveWith(
+      (states) => foregroundColor.withValues(
+        alpha: states.contains(WidgetState.disabled) ? 0.38 : 0.87,
+      ),
+    );
+    final buttons = ButtonStyle(foregroundColor: icons, iconColor: icons);
+    return base.copyWith(
+      colorScheme: base.colorScheme.copyWith(
+        primary: visible(base.colorScheme.primary),
+        error: visible(base.colorScheme.error),
+        onSurface: foregroundColor,
+        onSurfaceVariant: foregroundColor.withValues(alpha: 0.75),
+        outline: foregroundColor.withValues(alpha: 0.5),
+      ),
+      textTheme: base.textTheme.apply(
+        bodyColor: foregroundColor,
+        displayColor: foregroundColor,
+      ),
+      hintColor: foregroundColor.withValues(alpha: 0.6),
+      iconButtonTheme: IconButtonThemeData(
+        style: buttons.merge(base.iconButtonTheme.style),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: buttons.merge(base.textButtonTheme.style),
+      ),
+    );
+  }
+
+  Widget _buildFindRow(BuildContext context, ThemeData menuTheme) {
     final showLeading = canEdit && controller.mode != NoteSearchMode.smart;
     final leading = showLeading
         ? _buildLeadingSlot(
@@ -122,7 +164,7 @@ class NoteFindBar extends StatelessWidget {
         ),
       ),
     );
-    final options = _buildOptions(context);
+    final options = _buildOptions(context, menuTheme);
     final previous = _buildPreviousButton(context);
     final next = _buildNextButton(context);
     final close = _buildCloseButton(context);
@@ -296,18 +338,20 @@ class NoteFindBar extends StatelessWidget {
     return '${formatter.format(current)}/${formatter.format(total)}';
   }
 
-  Widget _buildOptions(BuildContext context) {
+  Widget _buildOptions(BuildContext context, ThemeData menuTheme) {
     final selected =
         controller.caseSensitive ||
         controller.wholeWord ||
         controller.mode != NoteSearchMode.literal;
-    return PopupMenuButton<_FindOption>(
+    final iconColor = selected
+        ? Theme.of(context).colorScheme.primary
+        : _matchesTheme(menuTheme)
+        ? null
+        : foregroundColor.withValues(alpha: 0.87);
+    final menu = PopupMenuButton<_FindOption>(
       key: const ValueKey('note_find_options'),
       tooltip: context.l10n.searchOptions,
-      icon: Icon(
-        Icons.tune,
-        color: selected ? Theme.of(context).colorScheme.primary : null,
-      ),
+      icon: Icon(Icons.tune, color: iconColor),
       onSelected: (option) {
         switch (option) {
           case _FindOption.caseSensitive:
@@ -363,6 +407,7 @@ class NoteFindBar extends StatelessWidget {
         ),
       ],
     );
+    return Theme(data: menuTheme, child: menu);
   }
 
   Widget _buildError(BuildContext context, NoteSearchError error) {
