@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  USER_COUNT_LOADING_STATE,
   USER_COUNT_UNAVAILABLE_STATE,
   compactUserCount,
-  createUserCountPresentation,
   loadPublicUserMetric,
   resolvePublicUserMetric
 } from '../site/src/lib/public-stats.ts';
@@ -33,7 +31,6 @@ test('prefers the compact metric and falls back to the legacy message', () => {
 });
 
 test('loads ready and unavailable user-count states', async () => {
-  assert.deepEqual(USER_COUNT_LOADING_STATE, { status: 'loading', metric: null });
   const ready = await loadPublicUserMetric({
     endpoint: 'https://example.test/stats',
     fetcher: async () => ({
@@ -118,24 +115,6 @@ test('returns unavailable after both transient attempts fail', async () => {
 
   assert.equal(requests, 2);
   assert.equal(result, USER_COUNT_UNAVAILABLE_STATE);
-});
-
-test('creates ready and neutral fallback presentations', () => {
-  assert.deepEqual(
-    createUserCountPresentation({ status: 'ready', metric: '4.3K+' }),
-    {
-      state: 'ready',
-      metric: '4.3K+',
-      label: 'People have joined',
-      announcement: '4.3K+ people have joined Better Keep'
-    }
-  );
-  assert.deepEqual(createUserCountPresentation(USER_COUNT_UNAVAILABLE_STATE), {
-    state: 'unavailable',
-    metric: null,
-    label: 'Growing community',
-    announcement: 'Better Keep has a growing community'
-  });
 });
 
 test('aborts a stalled user-count request at the configured timeout', async () => {

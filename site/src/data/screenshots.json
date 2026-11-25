@@ -11,9 +11,9 @@
   },
   {
     "id": "3",
-    "label": "Account",
-    "caption": "Accounts and subscription",
-    "alt": "Better Keep account screen showing subscription details and connected sign-in providers",
+    "label": "Edit",
+    "caption": "Rich text and tables",
+    "alt": "Better Keep rich-text editor showing a Weekend in Kyoto plan in a formatted table",
     "width": 1179,
     "height": 2556,
     "platform": "ios",
@@ -21,9 +21,9 @@
   },
   {
     "id": "4",
-    "label": "Protect",
-    "caption": "Private encrypted sync",
-    "alt": "Better Keep security screen showing encrypted notes, recovery controls, and approved devices",
+    "label": "Lock",
+    "caption": "Pinned and locked notes",
+    "alt": "Better Keep notes home showing pinned notes, locked notes, labels, and note colors",
     "width": 1179,
     "height": 2556,
     "platform": "ios",
@@ -56,6 +56,26 @@
     "alt": "Better Keep settings with dark theme controls and supported language choices",
     "width": 1179,
     "height": 2556,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "external-sync-ios",
+    "label": "Choose",
+    "caption": "Your choice of sync storage",
+    "alt": "Better Keep sync provider screen listing Better Keep cloud, Google Drive, Dropbox, Nextcloud, WebDAV, and sync off",
+    "width": 1320,
+    "height": 2868,
+    "platform": "ios",
+    "feature": "existing"
+  },
+  {
+    "id": "approved-device-sync-ios",
+    "label": "Protect",
+    "caption": "Private encrypted sync",
+    "alt": "Better Keep security screen showing encrypted notes, recovery controls, and an approved device",
+    "width": 1320,
+    "height": 2868,
     "platform": "ios",
     "feature": "existing"
   },

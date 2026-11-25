@@ -13,6 +13,10 @@ import test from 'node:test';
 import {
   GOOGLE_PLAY_BADGE_HEIGHT,
   GOOGLE_PLAY_BADGE_WIDTH,
+  heroCaptionFile,
+  heroPosterFiles,
+  heroPosterSources,
+  heroVideoFiles,
   screenshotCatalog,
   screenshotPreviewWidths,
   prepareSiteAssets,
@@ -39,7 +43,8 @@ const expectedStaticAssetOutputs = Object.freeze([
   'media/platforms/web-globe.svg',
   'media/store-badges/app-store.svg',
   'media/store-badges/google-play.png',
-  'media/store-badges/microsoft-store.svg'
+  'media/store-badges/microsoft-store.svg',
+  ...[...heroVideoFiles, heroCaptionFile, ...heroPosterFiles].map((file) => `media/video/${file}`)
 ]);
 
 const expectedPreparedAssets = Object.freeze([
@@ -85,6 +90,8 @@ test('keeps website-owned source assets inside site/assets', async () => {
     'store-badges/app-store.svg',
     'store-badges/google-play.png',
     'store-badges/microsoft-store.svg',
+    'video/SOURCES.md',
+    ...[...heroVideoFiles, heroCaptionFile, ...heroPosterSources].map((file) => `video/${file}`),
     ...screenshotIds.map((id) => `screenshots/${id}.png`)
   ];
 

@@ -3,28 +3,22 @@ import { product } from '../data/product';
 import Icon from './Icon.astro';
 ---
 
-<section class="home-section migration-section">
+<section class="migration-section">
   <div class="migration-card container">
     <div class="migration-card__copy">
       <p class="eyebrow">Import from Google Keep</p>
-      <h2>Move from Google Keep without uploading your Takeout ZIP.</h2>
+      <h2>Bring your Google Keep notes.</h2>
       <p>
-        Better Keep reads the archive on your device. It imports supported
-        notes and attachments, skips identical notes you already imported,
-        and lists anything it could not import.
+        Better Keep reads your Takeout ZIP on your device, skips notes you
+        already imported, and lists anything it could not import.
       </p>
-      <a
-        class="button button--secondary"
-        href="/import/google-keep"
-        data-analytics={product.analyticsGoals.keepImport}
-      >
-        Read the import guide <Icon name="ArrowRight" size={18} />
-      </a>
     </div>
-    <ol class="migration-steps">
-      <li><span>01</span><strong>Export</strong><small>Download your Google Takeout archive.</small></li>
-      <li><span>02</span><strong>Import locally</strong><small>Select the ZIP inside Better Keep.</small></li>
-      <li><span>03</span><strong>Review</strong><small>See imported, skipped, and unsupported items.</small></li>
-    </ol>
+    <a
+      class="button button--secondary"
+      href="/import/google-keep"
+      data-analytics={product.analyticsGoals.keepImport}
+    >
+      Read the import guide <Icon name="ArrowRight" size={18} />
+    </a>
   </div>
 </section>

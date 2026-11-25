@@ -8,13 +8,18 @@ import * as chromeLauncher from 'chrome-launcher';
 const siteRoot = path.resolve(import.meta.dirname, '..', '..', 'build', 'web');
 const reportRoot = path.join(siteRoot, '..', 'lighthouse');
 const mimeTypes = new Map([
+  ['.avif', 'image/avif'],
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
   ['.ico', 'image/x-icon'],
   ['.js', 'text/javascript; charset=utf-8'],
+  ['.mp4', 'video/mp4'],
   ['.json', 'application/json; charset=utf-8'],
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml'],
+  ['.vtt', 'text/vtt; charset=utf-8'],
+  ['.webp', 'image/webp'],
+  ['.woff2', 'font/woff2'],
   ['.txt', 'text/plain; charset=utf-8'],
   ['.xml', 'application/xml; charset=utf-8']
 ]);
@@ -69,7 +74,13 @@ if (!address || typeof address === 'string') {
 }
 
 const chrome = await chromeLauncher.launch({
-  chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu']
+  chromeFlags: [
+    '--headless=new',
+    '--no-sandbox',
+    '--disable-gpu',
+    // Chrome inherits the machine's setting, which would skip the hero video.
+    '--force-prefers-no-reduced-motion'
+  ]
 });
 const targets = [
   { path: '/', name: 'home' },

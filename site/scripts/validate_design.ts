@@ -1,12 +1,15 @@
-import { access, readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import heroVideo from '../src/data/hero-video.json' with { type: 'json' };
+import productFacts from '../src/data/product-facts.json' with { type: 'json' };
 import screenshotCatalog from '../src/data/screenshots.json' with { type: 'json' };
 import { screenshotPreviewWidths } from './prepare_assets.ts';
 
 const siteRoot = path.resolve(import.meta.dirname, '..');
 const outputRoot = path.join(siteRoot, 'dist');
 const failures: string[] = [];
+const HERO_LOOP_SECONDS = 25.7;
 
 function assert(condition: unknown, message: string) {
   if (!condition) failures.push(message);
@@ -19,6 +22,10 @@ async function exists(relativePath: string) {
   } catch {
     return false;
   }
+}
+
+async function fileSize(relativePath: string) {
+  return stat(path.join(outputRoot, relativePath)).then((info) => info.size).catch(() => 0);
 }
 
 async function collectHtml(directory: string, prefix = ''): Promise<string[]> {
@@ -55,6 +62,7 @@ const headerSource = await readFile(
   path.join(siteRoot, 'src', 'components', 'Header.astro'),
   'utf8'
 );
+const homeSource = await readFile(path.join(siteRoot, 'src', 'data', 'home.ts'), 'utf8');
 const homeHeroSource = await readFile(
   path.join(siteRoot, 'src', 'components', 'HomeHero.astro'),
   'utf8'
@@ -65,10 +73,6 @@ const storeActionsSource = await readFile(
 );
 const userCountSource = await readFile(
   path.join(siteRoot, 'src', 'components', 'UserCount.astro'),
-  'utf8'
-);
-const publicStatsSource = await readFile(
-  path.join(siteRoot, 'src', 'lib', 'public-stats.ts'),
   'utf8'
 );
 const baseLayoutSource = await readFile(
@@ -85,11 +89,9 @@ const requiredHomepageCopy = [
   'Private, offline-friendly notes',
   'Write, organize, and find',
   'For lists, plans, and longer notes.',
-  'Protect private notes across approved devices.',
-  'Inside Better Keep',
-  'Take a look inside the app.',
-  'Write in tables, make nested checklists, record voice notes, and choose a theme you like.',
-  'Start with free notes.'
+  'Your notes, your choice of cloud.',
+  'Bring your Google Keep notes.',
+  'Start with a free note.'
 ];
 const removedMetaMarketingCopy = [
   'A calmer place for everything worth keeping',
@@ -103,18 +105,16 @@ const removedMetaMarketingCopy = [
   'Keep the familiar flow. Upgrade everything around it.'
 ];
 const expectedScreenshotCaptions = Object.fromEntries(screenshotCatalog.map((item) => [item.id, item.caption]));
-const expectedFeatureIcons = [
-  'text-cursor-input',
-  'shield-check',
-  'cloud-off',
-  'monitor-smartphone',
-  'folders',
-  'audio-waveform'
+const iconClass = (name: string) =>
+  `lucide-${name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()}`;
+const expectedFeatures = [...homeSource.matchAll(/^ {4}icon: '(\w+)',\n {4}href: '([^']+)'/gm)];
+const featureCards = [
+  ...index.matchAll(/<a[^>]*class="feature-card"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)
 ];
 
 assert(
-  (index.match(/class="feature-row"/g) || []).length === 6,
-  'Homepage must render exactly six primary feature rows'
+  (index.match(/class="feature-card"/g) || []).length === 4,
+  'Homepage must render exactly four feature cards'
 );
 
 for (const copy of requiredHomepageCopy) {
@@ -124,12 +124,22 @@ for (const copy of requiredHomepageCopy) {
   );
 }
 
-for (const icon of expectedFeatureIcons) {
-  assert(
-    index.includes(`lucide-${icon}`),
-    `Homepage is missing configured SVG icon: ${icon}`
-  );
-}
+assert(
+  expectedFeatures.length === 4 &&
+    expectedFeatures.every(
+      ([, icon, href], position) =>
+        featureCards[position]?.[1] === href &&
+        featureCards[position]?.[2].includes(iconClass(icon))
+    ),
+  'Each feature card must show its configured icon and link'
+);
+const privacyMarkup = index.match(/<section[^>]*privacy-section[\s\S]*?<\/section>/)?.[0] || '';
+assert(
+  ['ShieldCheck', 'MonitorSmartphone', 'KeyRound'].every((icon) =>
+    privacyMarkup.includes(iconClass(icon))
+  ),
+  'Privacy points must show their icons'
+);
 
 assert(
   !index.includes('>Open Source<'),
@@ -149,58 +159,95 @@ assert(
     headerSource.includes('data-analytics={product.analyticsGoals.github}') &&
     !homeHeroSource.includes('hero-github-badge') &&
     !homeHeroSource.includes('class="hero-proof"') &&
-    !homeHeroSource.includes('platforms-note') &&
-    homeHeroSource.includes('home-hero__community'),
-  'GitHub must be an accessible header icon, with only the anchored community count retained in the hero'
+    !homeHeroSource.includes('platforms-note'),
+  'GitHub must be an accessible header icon and stay out of the hero'
 );
 assert(
-  index.includes('data-user-count') &&
-    index.includes('data-state="idle"') &&
-    index.includes('role="status"') &&
-    index.includes('aria-live="polite"') &&
-    index.includes('aria-busy="true"') &&
-    index.includes('user-count-proof__spinner') &&
-    index.includes('People have joined') &&
-    index.includes('lucide-users'),
-  'Homepage is missing the accessible community-count loading state'
+  homeHeroSource.includes('<UserCount />') &&
+    userCountSource.includes('await buildUserMetric') &&
+    !userCountSource.includes('<script') &&
+    !userCountSource.includes('spinner'),
+  'User count must be written into the HTML at build time without a loading state'
+);
+const publicStatsUrl: string = productFacts.publicStatsUrl;
+assert(
+  !index.includes(publicStatsUrl),
+  'Homepage must not request the user count from the browser'
+);
+const builtUserCount = index.match(/<p class="user-count"[\s\S]*?<\/p>/)?.[0];
+assert(
+  !builtUserCount ||
+    /\d+(?:\.\d)?[KM]?\+?\s+people have joined/i.test(visibleText(builtUserCount)),
+  'A rendered user count must contain the measured number'
 );
 assert(
-  index.includes('class="home-hero__community"'),
-  'Registered-user metric must have a dedicated anchored position in the hero'
+  !/\d+(?:\.\d)?[KM]?\+/.test(userCountSource + homeHeroSource),
+  'Homepage source must not hard-code a community count'
+);
+const heroVideoTag = index.match(/<video\b[^>]*data-hero-video[^>]*>/)?.[0] || '';
+assert(
+  ['muted', 'loop', 'playsinline', 'preload="none"', 'aria-describedby='].every(
+    (attribute) => heroVideoTag.includes(attribute)
+  ) && !/\s(?:src|autoplay)[=\s>]/.test(heroVideoTag),
+  'Hero video must be muted, inline, and fetched only after the poster has loaded'
+);
+const captionSource = await readFile(
+  path.join(outputRoot, 'media', 'video', 'hero.en.vtt'),
+  'utf8'
+).catch(() => '');
+const captionEnds = [...captionSource.matchAll(/--> 00:00:([\d.]+)/g)].map((match) => Number(match[1]));
+assert(
+  /<track[^>]*kind="captions"[^>]*src="\/media\/video\/hero\.en\.vtt"/.test(index) &&
+    /<button[^>]*data-hero-video-captions[^>]*aria-pressed="false"/.test(index) &&
+    captionEnds.length === 12 &&
+    captionEnds.every((end) => end <= HERO_LOOP_SECONDS),
+  'Narrated hero video needs captions that fit the loop and a captions button'
 );
 assert(
-  !/\d+(?:\.\d)?[KM]\+\s+people have joined/i.test(indexVisibleText) &&
-    !/4200\+|4500\+/.test(indexVisibleText),
-  'Homepage must not hard-code a community count'
+  /<div[^>]*data-hero-video-controls[^>]*hidden/.test(index) &&
+    /<button[^>]*data-hero-video-toggle[^>]*aria-label="Play video"/.test(index) &&
+    /<button[^>]*data-hero-video-mute[^>]*aria-label="Unmute video"/.test(index) &&
+    ['avif', 'webp'].every((format) =>
+      new RegExp(
+        `<source[^>]*media="\\(max-width: 680px\\)"[^>]*srcset="/media/video/hero-tall-[^>]*type="image/${format}"`
+      ).test(index)
+    ) &&
+    /<img[^>]*src="\/media\/video\/hero-wide-1280\.webp"[^>]*fetchpriority="high"/.test(index),
+  'Hero video needs pause and mute controls and prioritized responsive posters'
 );
-const userCountMetricRule =
-  sourceCss.match(/\.user-count-proof__metric\s*\{([^}]*)\}/)?.[1] || '';
-const userCountSpinnerRule =
-  sourceCss.match(/\.user-count-proof__spinner\s*\{([^}]*)\}/)?.[1] || '';
-assert(
-  /width:\s*2\.5rem/.test(userCountMetricRule) &&
-    /flex:\s*0 0 2\.5rem/.test(userCountMetricRule) &&
-    /font-variant-numeric:\s*tabular-nums/.test(userCountMetricRule) &&
-    /animation:\s*user-count-spin/.test(userCountSpinnerRule) &&
-    sourceCss.includes(".user-count-proof[data-state='idle']") &&
-    sourceCss.includes('.user-count-proof__metric[hidden]') &&
-    sourceCss.includes('.user-count-proof__spinner {\n    animation: none !important;'),
-  'User-count metric must reserve space, collapse its fallback gap, and provide a reduced-motion-safe loader'
-);
-assert(
-  userCountSource.includes('loadPublicUserMetric') &&
-    userCountSource.includes('createUserCountPresentation') &&
-    userCountSource.includes('data-user-count-label') &&
-    userCountSource.includes('metric.hidden = presentation.metric === null') &&
-    !userCountSource.includes('counter.hidden = true') &&
-    publicStatsSource.includes('timeoutMs = 3000') &&
-    publicStatsSource.includes('maxAttempts = 2') &&
-    publicStatsSource.includes('retryDelayMs = 250') &&
-    publicStatsSource.includes("label: 'Growing community'") &&
-    publicStatsSource.includes("record.metric") &&
-    publicStatsSource.includes("record.message"),
-  'User-count client must support retry, a stable neutral fallback, and legacy responses'
-);
+for (const [layout, { renditions, posterWidths }] of Object.entries(heroVideo)) {
+  for (const { width, kbps } of renditions) {
+    for (const [codec, listed] of Object.entries(kbps) as [string, number][]) {
+      const file = `media/video/hero-${layout}-${width}.${codec}.mp4`;
+      const size = await fileSize(file);
+      const measured = (size * 8) / 1000 / HERO_LOOP_SECONDS;
+      // Network selection relies on these numbers matching the files.
+      assert(
+        size > 0 && Math.abs(measured - listed) <= listed * 0.05,
+        `${file} is ${Math.round(measured)} kbps; hero-video.json lists ${listed}`
+      );
+    }
+    assert(
+      !('h264' in kbps) || kbps.av1 < Number(kbps.h264),
+      `${layout} ${width} AV1 must be smaller than H.264`
+    );
+  }
+  assert(
+    renditions.every(({ width }, index) => index === 0 || width > renditions[index - 1].width),
+    `${layout} hero renditions must be listed smallest first`
+  );
+  assert(
+    renditions.every(({ kbps }) => Object.values(kbps).every((rate) => rate <= 600)) &&
+      Object.values(renditions[0].kbps).every((rate) => rate <= 300),
+    `${layout} hero renditions exceed the bandwidth budget`
+  );
+  for (const width of posterWidths) {
+    for (const format of ['avif', 'webp']) {
+      const size = await fileSize(`media/video/hero-${layout}-${width}.${format}`);
+      assert(size > 0 && size <= 70_000, `${layout} ${width} ${format} poster is ${size} bytes`);
+    }
+  }
+}
 assert(
   sourceCss.includes('@media (prefers-reduced-motion: reduce)'),
   'Design system does not include reduced-motion handling'
@@ -227,17 +274,10 @@ const narrowMobileNavigationRule =
   sourceCss.match(
     /@media\s*\(max-width:\s*860px\)[\s\S]*?\.mobile-navigation\s*\{([^}]*)\}/
   )?.[1] || '';
-const mobileHeroDecorationRule =
+const heroVideoRule = sourceCss.match(/\n\.hero-video\s*\{([^}]*)\}/)?.[1] || '';
+const narrowHeroVideoRule =
   sourceCss.match(
-    /@media\s*\(max-width:\s*920px\)[\s\S]*?\.home-hero::before\s*\{([^}]*)\}/
-  )?.[1] || '';
-const narrowHeroStageRule =
-  sourceCss.match(
-    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.hero-stage\s*\{([^}]*)\}/
-  )?.[1] || '';
-const narrowHeroPrimaryDeviceRule =
-  sourceCss.match(
-    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.hero-device--primary\s*\{([^}]*)\}/
+    /@media\s*\(max-width:\s*680px\)[\s\S]*?\.hero-video\s*\{([^}]*)\}/
   )?.[1] || '';
 const narrowDocumentTableRule =
   sourceCss.match(
@@ -260,17 +300,9 @@ assert(
   'Mobile navigation must fill and scroll within the viewport below the header'
 );
 assert(
-  /top:\s*13rem/.test(mobileHeroDecorationRule),
-  'Mobile hero decoration must use a stable viewport position'
-);
-assert(
-  /min-height:\s*calc\(clamp\(210px,\s*64vw,\s*250px\)\s*\*\s*2\.4\s*\+\s*12px\)/.test(
-    narrowHeroStageRule
-  ) &&
-    /width:\s*clamp\(210px,\s*64vw,\s*250px\)/.test(
-      narrowHeroPrimaryDeviceRule
-    ),
-  'Phone hero must reserve space for the bounded primary screenshot'
+  /aspect-ratio:\s*16 \/ 9/.test(heroVideoRule) &&
+    /aspect-ratio:\s*9 \/ 16/.test(narrowHeroVideoRule),
+  'Hero video must reserve its space for both the wide and tall cuts'
 );
 assert(
   /display:\s*block/.test(narrowDocumentTableRule) &&
@@ -306,15 +338,10 @@ assert(
 const screenshotOrder = [
   ...index.matchAll(/data-screenshot-id="([^"]+)"/g)
 ].map((match) => match[1]);
-const expectedScreenshotOrder = ['5', '2', '6', '5', 'table-ios', 'checklist-ios', '6', '2', '4', '7', '3', '4'];
+const expectedScreenshotOrder = ['external-sync-ios'];
 assert(
   screenshotOrder.join(',') === expectedScreenshotOrder.join(','),
-  `Screenshot order is ${screenshotOrder.join(',')}; expected the hero, sorted iOS carousel, then security screen`
-);
-assert(
-  screenshotOrder.every((id) => screenshotCatalog.find((item) => item.id === id)?.platform === 'ios') &&
-    screenshotCatalog.filter((item) => item.platform === 'ios').every((item) => screenshotOrder.includes(item.id)),
-  'Homepage must show all iOS screenshots and no other platforms'
+  `Screenshot order is ${screenshotOrder.join(',')}; expected only the sync provider screen`
 );
 assert(
   (index.match(/<figcaption>/g) || []).length === expectedScreenshotOrder.length,
@@ -341,8 +368,6 @@ for (const item of screenshotCatalog) {
   }
 }
 assert(!index.includes('data-screenshot-id="1"') && !await exists('media/screenshots/1.png'), 'Sign-in screenshot must be removed');
-assert(index.includes('data-screenshot-carousel') && index.includes('data-carousel-toggle'), 'Screenshot carousel and pause control are missing');
-assert(!index.includes('data-feature-showcase'), 'Tables and checklists must share the screenshot carousel');
 
 for (const asset of [
   'media/brand/logo.svg',
@@ -480,8 +505,7 @@ assert(
     /transform:\s*scale\(1\.16\)/.test(webActionIconRule) &&
     /border:\s*0/.test(webActionRule) &&
     /background:\s*#000/.test(webActionRule) &&
-    /color:\s*#fff/.test(webActionRule) &&
-    !sourceCss.includes('.home-cta .web-app-action'),
+    /color:\s*#fff/.test(webActionRule),
   'Web and native actions must share a fixed visual scale with an inverted Web treatment'
 );
 assert(
@@ -491,14 +515,14 @@ assert(
   'Store badges must not use platform-specific sizing overrides'
 );
 assert(
-  (index.match(/class="store-badge"/g) || []).length === 6,
-  'Homepage must render six store badges through the shared frame'
+  (index.match(/class="store-badge"/g) || []).length === 3,
+  'Homepage must render three store badges through the shared frame'
 );
 for (const platform of ['apple', 'google', 'microsoft']) {
   assert(
     (index.match(new RegExp(`data-store-platform="${platform}"`, 'g')) || [])
-      .length === 2,
-    `Homepage must render ${platform} once in each store-action group`
+      .length === 1,
+    `Homepage must render ${platform} once in its store-action group`
   );
 }
 assert(
@@ -520,6 +544,22 @@ assert(
     index.indexOf('dataset.storePlatform') > -1 &&
     index.indexOf('dataset.storePlatform') < index.indexOf('</head>'),
   'Platform selection must execute synchronously before page content paints'
+);
+assert(
+  /<script\b[^>]*\basync\b[^>]*src="https:\/\/plausible\.io/.test(index) &&
+    !/<script\b[^>]*\bdefer\b[^>]*src="https:/.test(index),
+  'Third-party scripts must be async so a slow one cannot block site scripts'
+);
+const builtStyles = (
+  await Promise.all(
+    (await readdir(path.join(outputRoot, '_astro')))
+      .filter((file) => file.endsWith('.css'))
+      .map((file) => readFile(path.join(outputRoot, '_astro', file), 'utf8'))
+  )
+).join('');
+assert(
+  /(?:^|[}])html\.menu-open \.floating-web-app\{display:none\}/.test(builtStyles),
+  'The menu must hide the floating action even in browsers without :has()'
 );
 const platformMarkup = index.match(
   /<div class="platform-grid">[\s\S]*?<\/div>/
@@ -748,5 +788,8 @@ if (failures.length) {
 }
 
 console.log(
-  `Design validation passed for ${htmlFiles.length} pages, six feature icons, and ${screenshotCatalog.length} screenshots.`
+  `Design validation passed for ${htmlFiles.length} pages, ${expectedFeatures.length} feature cards, and ${screenshotCatalog.length} screenshots.`
 );
+if (!builtUserCount) {
+  console.warn('WARNING: the homepage was built without the user count. Rebuild before deploying.');
+}

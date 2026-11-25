@@ -17,14 +17,18 @@ const viewports = Object.freeze([
   { height: 844, name: 'standard phone', width: 390 },
   { height: 900, name: 'wide phone', width: 680 },
   { height: 1024, name: 'tablet', width: 768 },
+  { height: 390, name: 'sideways phone', width: 844 },
   { height: 900, name: 'desktop', width: 1280 }
 ]);
 const mimeTypes = new Map([
+  ['.avif', 'image/avif'],
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
+  ['.mp4', 'video/mp4'],
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml'],
+  ['.vtt', 'text/vtt; charset=utf-8'],
   ['.webp', 'image/webp'],
   ['.woff2', 'font/woff2']
 ]);
@@ -178,12 +182,13 @@ function createWebDriver(baseUrl: string) {
 async function waitForPage(request: ReturnType<typeof createWebDriver>, sessionId: string) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const readyState = await request(
+    const ready = await request(
       'POST',
       `/session/${sessionId}/execute/sync`,
-      { args: [], script: 'return document.readyState;' }
+      { args: [], script: `return document.readyState === 'complete' &&
+          document.querySelector('[data-hero-video-controls]')?.hidden === false;` }
     );
-    if (readyState === 'complete') {
+    if (ready) {
       await sleep(250);
       return;
     }
@@ -208,38 +213,18 @@ function measureHomepage(): Measurements {
       width: bounds.width
     };
   };
-  const gallery = document.querySelector<HTMLElement>('.device-gallery')!;
-  const galleryItems = [...document.querySelectorAll('.device-gallery__item')];
-  const galleryStyle = getComputedStyle(gallery);
-  const initialScrollLeft = gallery.scrollLeft;
-  gallery.scrollLeft = gallery.scrollWidth;
-  const lastItem = galleryItems.at(-1)?.getBoundingClientRect();
-  const galleryBounds = gallery.getBoundingClientRect();
   const targetHeights = [
     ...document.querySelectorAll(
-      '.mobile-menu-toggle, .web-app-action, .store-badge:not([style*="display: none"]), .nav-github'
+      '.mobile-menu-toggle, .hero-video__controls button, .web-app-action, .store-badge:not([style*="display: none"]), .nav-github'
     )
-  ].filter((element) => getComputedStyle(element).display !== 'none')
+  ].filter((element) => element.getClientRects().length > 0)
     .map((element) => element.getBoundingClientRect().height);
-  const result = {
+  return {
     documentHeight: document.documentElement.scrollHeight,
-    gallery: {
-      clientWidth: gallery.clientWidth,
-      height: galleryBounds.height,
-      itemCount: galleryItems.length,
-      itemSnap: galleryItems.map(
-        (item) => getComputedStyle(item).scrollSnapAlign
-      ),
-      lastItemReachable: Boolean(
-        lastItem && lastItem.right <= galleryBounds.right + 2
-      ),
-      overflowX: galleryStyle.overflowX,
-      scrollSnapType: galleryStyle.scrollSnapType,
-      scrollWidth: gallery.scrollWidth
-    },
     lede: rect('.home-hero__lede')!,
     heroActions: rect('.home-hero__actions')!,
-    halo: rect('.hero-stage__backdrop')!,
+    heroVideo: rect('.hero-video')!,
+    headerHeight: rect('.site-header')!.height,
     hero: rect('.home-hero')!,
     horizontalExtent: Math.max(
       document.documentElement.scrollWidth,
@@ -247,12 +232,9 @@ function measureHomepage(): Measurements {
     ),
     innerWidth,
     layoutWidth: document.documentElement.clientWidth,
-    leftPhone: rect('.hero-device--left')!,
     platformColumns: getComputedStyle(
       document.querySelector('.platform-grid')!
     ).gridTemplateColumns.split(' ').length,
-    primaryPhone: rect('.hero-device--primary')!,
-    rightPhone: rect('.hero-device--right')!,
     storeActionGroups: [...document.querySelectorAll('.store-actions')].map(
       (element) => {
         const bounds = element.getBoundingClientRect();
@@ -264,8 +246,6 @@ function measureHomepage(): Measurements {
     ),
     targetHeights
   };
-  gallery.scrollLeft = initialScrollLeft;
-  return result;
 }
 
 const measurementScript = `return (${measureHomepage.toString()})();`;
@@ -274,9 +254,8 @@ type Viewport = typeof viewports[number];
 type MeasuredRect = { top: number; bottom: number; display: string; height: number; left: number; right: number; width: number };
 type Measurements = {
   documentHeight: number;
-  gallery: { clientWidth: number; height: number; itemCount: number; itemSnap: string[]; lastItemReachable: boolean; overflowX: string; scrollSnapType: string; scrollWidth: number };
-  lede: MeasuredRect; heroActions: MeasuredRect; halo: MeasuredRect; hero: MeasuredRect; leftPhone: MeasuredRect; primaryPhone: MeasuredRect; rightPhone: MeasuredRect;
-  horizontalExtent: number; innerWidth: number; layoutWidth: number; platformColumns: number;
+  lede: MeasuredRect; heroActions: MeasuredRect; heroVideo: MeasuredRect; hero: MeasuredRect;
+  headerHeight: number; horizontalExtent: number; innerWidth: number; layoutWidth: number; platformColumns: number;
   storeActionGroups: { left: number; right: number }[];
   targetHeights: number[];
 };
@@ -292,11 +271,31 @@ function verifyViewport(viewport: Viewport, metrics: Measurements) {
     metrics.horizontalExtent <= metrics.innerWidth + 1,
     `horizontal content is ${metrics.horizontalExtent}px wide in a ${metrics.innerWidth}px viewport`
   );
-  assert(metrics.primaryPhone, 'primary hero phone is missing');
+  assert(metrics.heroVideo, 'hero video is missing');
   assert(
-    metrics.primaryPhone.left >= -1 &&
-      metrics.primaryPhone.right <= metrics.innerWidth + 1,
-    'primary hero phone leaves the viewport'
+    metrics.heroVideo.left >= -1 &&
+      metrics.heroVideo.right <= metrics.innerWidth + 1,
+    'hero video leaves the viewport'
+  );
+  assert(
+    metrics.heroActions.top >= metrics.lede.bottom &&
+      metrics.heroVideo.top >= metrics.heroActions.bottom,
+    'hero must read introduction, download options, then video'
+  );
+  assert(
+    metrics.heroActions.bottom <= viewport.height,
+    'download options are below the first viewport'
+  );
+  // A sideways phone has room for the buttons and the top of the video only.
+  const sideways = viewport.height <= 500;
+  const visibleVideo = sideways ? 90 : 120;
+  assert(
+    metrics.heroVideo.top <= viewport.height - visibleVideo,
+    `less than ${visibleVideo}px of the video is visible in the first viewport`
+  );
+  assert(
+    !sideways || metrics.heroVideo.height <= viewport.height - metrics.headerHeight,
+    'the whole video does not fit below the header on a sideways phone'
   );
   assert(
     metrics.targetHeights.every((height) => height >= 44),
@@ -304,13 +303,9 @@ function verifyViewport(viewport: Viewport, metrics: Measurements) {
   );
 
   if (mobile) {
-    assert(metrics.primaryPhone.top >= metrics.lede.bottom, 'hero screenshot overlaps the introduction');
-    assert(metrics.primaryPhone.top <= viewport.height - 240, 'less than 240px of the app preview is visible in the first viewport');
-    assert(metrics.heroActions.top >= metrics.primaryPhone.bottom, 'download options appear before the app preview');
     const viewportCenter = metrics.layoutWidth / 2;
-    const haloRatio = metrics.halo.width / metrics.halo.height;
     assert(
-      metrics.storeActionGroups.length >= 2,
+      metrics.storeActionGroups.length >= 1,
       'homepage store-action groups are missing'
     );
     assert(
@@ -325,47 +320,23 @@ function verifyViewport(viewport: Viewport, metrics: Measurements) {
         .join(', ')}px from center`
     );
     assert(
-      haloRatio >= 0.98 && haloRatio <= 1.02,
-      `hero halo ratio is ${haloRatio.toFixed(3)}, expected 1:1`
+      Math.abs(metrics.heroVideo.height / metrics.heroVideo.width - 16 / 9) <= 0.02,
+      'mobile hero video is not 9:16'
     );
-    assert(metrics.leftPhone.display === 'none', 'left hero phone is visible');
-    assert(metrics.rightPhone.display === 'none', 'right hero phone is visible');
     assert(metrics.hero.height <= 1_400, `hero is ${metrics.hero.height}px tall`);
-    assert(
-      metrics.gallery.height <= 720,
-      `mobile gallery is ${metrics.gallery.height}px tall`
-    );
-    assert(
-      metrics.gallery.scrollWidth > metrics.gallery.clientWidth + 10,
-      'mobile gallery is not horizontally scrollable'
-    );
-    assert(
-      metrics.gallery.overflowX === 'auto' &&
-        metrics.gallery.scrollSnapType.startsWith('x'),
-      'mobile gallery is missing native horizontal scroll snapping'
-    );
-    assert(
-      metrics.gallery.itemSnap.every((value) => value === 'start'),
-      'one or more gallery cards do not snap to the start edge'
-    );
-    assert(metrics.gallery.lastItemReachable, 'last gallery card is not reachable');
-    assert(metrics.gallery.itemCount === 8, 'mobile carousel changed card count');
     assert(
       metrics.platformColumns === (viewport.width >= 360 ? 2 : 1),
       `platform grid has ${metrics.platformColumns} columns`
     );
     assert(
-      metrics.documentHeight <= 9_000,
+      metrics.documentHeight <= 5_500,
       `mobile homepage is still ${metrics.documentHeight}px tall`
     );
   } else {
-    assert(metrics.leftPhone.display !== 'none', 'desktop/tablet left phone is hidden');
-    assert(metrics.rightPhone.display !== 'none', 'desktop/tablet right phone is hidden');
     assert(
-      metrics.gallery.scrollWidth > metrics.gallery.clientWidth + 10,
-      'desktop/tablet carousel is not horizontally scrollable'
+      Math.abs(metrics.heroVideo.width / metrics.heroVideo.height - 16 / 9) <= 0.02,
+      'desktop/tablet hero video is not 16:9'
     );
-    assert(metrics.gallery.itemCount === 8, 'desktop/tablet carousel changed card count');
   }
 
   if (failures.length) {
@@ -437,7 +408,7 @@ async function runAcceptance() {
       );
       verifyViewport(viewport, metrics);
       console.log(
-        `${viewport.name}: ${Math.round(metrics.hero.height)}px hero, ${Math.round(metrics.gallery.height)}px gallery, ${metrics.documentHeight}px page`
+        `${viewport.name}: ${Math.round(metrics.hero.height)}px hero, ${Math.round(metrics.heroVideo.height)}px video, ${metrics.documentHeight}px page`
       );
     }
   } finally {
